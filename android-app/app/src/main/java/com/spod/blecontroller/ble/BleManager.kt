@@ -426,7 +426,7 @@ object BleManager {
 
     // ── Log Helpers ──────────────────────────────────────────────────────────
 
-    private val maxLogEntries = 100
+    private val maxLogEntries = Logger.MAX_LOG_ENTRIES
 
     private fun addTxLog(message: String) {
         val timestamp = java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.US)
@@ -442,10 +442,6 @@ object BleManager {
         val entry = "[$timestamp] RX: $message"
         val updated = (_rxLog.value + entry).takeLast(maxLogEntries)
         _rxLog.value = updated
-    }
-
-    private fun Logger.warn(tag: String, message: String) {
-        Logger.info(tag, "WARN: $message")
     }
 
     // ── Cleanup ──────────────────────────────────────────────────────────────

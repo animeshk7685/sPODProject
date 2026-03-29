@@ -38,6 +38,8 @@ class CircuitAdapter(
             binding.apply {
                 tvCircuitLabel.text = circuit.label
 
+                // Null the listener before setting isChecked to prevent a recursive callback
+                // when the RecyclerView rebinds an existing view with a new checked state.
                 switchCircuit.setOnCheckedChangeListener(null)
                 switchCircuit.isChecked = circuit.isOn
 

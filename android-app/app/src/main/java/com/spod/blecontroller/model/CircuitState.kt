@@ -10,7 +10,7 @@ package com.spod.blecontroller.model
 data class CircuitState(
     val circuitNumber: Int,
     val label: String,
-    var isOn: Boolean = false
+    val isOn: Boolean = false
 ) {
     companion object {
         /**

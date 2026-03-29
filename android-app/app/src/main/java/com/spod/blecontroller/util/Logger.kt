@@ -19,7 +19,7 @@ import java.util.concurrent.ConcurrentLinkedDeque
 object Logger {
 
     private const val LOGCAT_TAG = "SPOD_BLE"
-    private const val MAX_LOG_ENTRIES = 100
+    const val MAX_LOG_ENTRIES = 100
 
     @Volatile
     var isDebugEnabled: Boolean = true
@@ -56,6 +56,11 @@ object Logger {
     fun tx(tag: String, message: String) {
         log(LogLevel.TX, tag, message)
         Log.d(LOGCAT_TAG, "[$tag] TX: $message")
+    }
+
+    fun warn(tag: String, message: String) {
+        log(LogLevel.INFO, tag, message)
+        Log.w(LOGCAT_TAG, "[$tag] WARN: $message")
     }
 
     /** Log a received BLE packet */

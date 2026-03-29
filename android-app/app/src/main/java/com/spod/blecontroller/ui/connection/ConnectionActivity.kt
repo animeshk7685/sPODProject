@@ -10,8 +10,8 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.spod.blecontroller.R
-import com.spod.blecontroller.ble.ConnectionState
-import com.spod.blecontroller.databinding.ActivityConnectionBinding
+import com.spod.blecontroller.ble.BleConstants
+import com.spod.blecontroller.ble.ConnectionStateimport com.spod.blecontroller.databinding.ActivityConnectionBinding
 import com.spod.blecontroller.ui.control.ControlActivity
 import com.spod.blecontroller.util.Logger
 import kotlinx.coroutines.launch
@@ -140,7 +140,7 @@ class ConnectionActivity : AppCompatActivity() {
 
     private fun startConnectionTimeout() {
         connectionTimeoutTimer?.cancel()
-        connectionTimeoutTimer = object : CountDownTimer(15_000L, 1_000L) {
+        connectionTimeoutTimer = object : CountDownTimer(BleConstants.CONNECTION_TIMEOUT_MS, 1_000L) {
             override fun onTick(millisUntilFinished: Long) {}
 
             override fun onFinish() {

@@ -26,25 +26,28 @@ An Android application written in Kotlin that connects to an **ESP32-based sPOD 
 
 ## Quick Start
 
-### 1. Configure BLE UUIDs
+### 1. BLE UUIDs (already configured)
 
-Before building, update the UUIDs in `BleConstants.kt` to match your PCM hardware:
+The app uses the UUIDs derived directly from the PCM firmware source
+(`pcm/ble.cpp`, `ble_attUuid128` array). No changes needed unless the
+firmware is modified.
+
+| Constant | UUID | Purpose |
+|---|---|---|
+| `SERVICE_UUID` | `7e3af9ec-8c0d-447b-8404-e99f6056685b` | sPOD primary service |
+| `CHARACTERISTIC_UUID` | `b9064764-4c00-4c6f-a65b-ec02646fc6f4` | COMM characteristic (circuit control) |
+| `UNSECURED_CHARACTERISTIC_UUID` | `a0ba57d9-7b58-4536-82e8-cca1cbfd6cde` | Security/passkey characteristic |
+
+### 2. PCM Address (multi-board setups)
+
+If you have more than one PCM board on the RS-485 bus, update the address in
+`BleConstants.kt`:
 
 ```kotlin
-// app/src/main/java/com/spod/blecontroller/ble/BleConstants.kt
-
-val SERVICE_UUID: UUID = UUID.fromString("0000ffe0-0000-1000-8000-00805f9b34fb")
-val CHARACTERISTIC_UUID: UUID = UUID.fromString("0000ffe1-0000-1000-8000-00805f9b34fb")
+const val PCM_ADDRESS: Int = 0   // Change to 1, 2, or 3 for additional boards
 ```
 
-**To find your device's UUIDs:**
-1. Install [nRF Connect for Mobile](https://play.google.com/store/apps/details?id=no.nordicsemi.android.mcp) on Android
-2. Power on your PCM board
-3. Scan and connect to it in nRF Connect
-4. Note the **Service UUID** and the **writable Characteristic UUID**
-5. Replace the placeholder UUIDs in `BleConstants.kt`
-
-### 2. Build & Run
+### 3. Build & Run
 
 ```bash
 cd android-app
@@ -55,52 +58,114 @@ Or open in Android Studio and click **Run ▶**.
 
 ---
 
+## Authentication / Pairing
+
+**The PCM firmware enforces BLE security.** All writes to the COMM characteristic are
+silently dropped unless `authGood` is set in the firmware, which only happens after
+a successful BLE pairing or passkey exchange.
+
+### Secured mode (default firmware config)
+
+The firmware boots with:
+```cpp
+BLEDevice::setSecurityAuth(true /*bonding*/, true /*MITM*/, true /*SC*/);
+BLEDevice::setSecurityPasskey(123456);
+BLEDevice::setSecurityIOCap(BLE_HS_IO_DISPLAY_ONLY);
+```
+
+When you connect for the first time:
+1. Android will show a system pairing dialog
+2. **Enter passkey `123456`** when prompted
+3. After pairing completes, `authGood` is set and circuit commands work
+
+### Unsecured mode
+
+If the device has `status.isUnsecured = true` (set via device configuration), the
+app must write a passkey packet to the `UNSECURED_CHARACTERISTIC_UUID` before
+commands are accepted. See `processSecurityPacket()` in `pcm/ble.cpp` for the
+packet format.
+
+> **Note:** If circuit toggle commands appear to be sent (the app shows TX logs)
+> but the PCM board does not respond, the most likely cause is that pairing has
+> not been completed and `authGood` is still `false` on the firmware side.
+
+---
+
 ## BLE Protocol
 
-### Command Packet Format
-
-The app communicates with the PCM board using a **single-byte command**:
-
-| Bit 7 | Bit 6 | Bit 5 | Bit 4 | Bit 3 | Bit 2 | Bit 1 | Bit 0 |
-|-------|-------|-------|-------|-------|-------|-------|-------|
-| Circuit 8 | Circuit 7 | Circuit 6 | Circuit 5 | Circuit 4 | Circuit 3 | Circuit 2 | Circuit 1 |
-
-- **1** = Circuit ON
-- **0** = Circuit OFF
-
-**Examples:**
-- `0x00` (`0b00000000`) — All circuits OFF
-- `0xFF` (`0b11111111`) — All circuits ON
-- `0x05` (`0b00000101`) — Circuits 1 and 3 ON, rest OFF
-- `0x0F` (`0b00001111`) — Circuits 1–4 ON
-
-### BLE Flow
+### Complete BLE Flow
 
 ```
-Android App                    PCM Board (ESP32)
-    |                               |
-    |------- BLE Scan ------------->|  (discovers device)
-    |                               |
-    |------- GATT Connect --------->|
-    |<------ Connected -------------|
-    |                               |
-    |------- Discover Services ---->|
-    |<------ Services List ---------|
-    |                               |
-    |------- Enable Notifications ->|  (write CCCD descriptor)
-    |<------ Descriptor Written ----|
-    |                               |
-    |  *** CONNECTION READY ***     |
-    |                               |
-    |------- Write Characteristic ->|  (send circuit byte)
-    |<------ Write Confirmed -------|
-    |                               |
-    |<------ Notification ---------|  (optional: PCM sends state back)
+Android App                        PCM Board (ESP32 / NimBLE)
+    |                                       |
+    |------- BLE Scan ─────────────────────>|  advertises "sPOD Link #XXXXXXXX"
+    |<------ Advertisement (service UUID) --|
+    |                                       |
+    |------- GATT Connect ─────────────────>|  TRANSPORT_LE
+    |<------ Connected ─────────────────────|
+    |                                       |
+    |      *** BLE PAIRING ***              |
+    |------- Pair Request ─────────────────>|  Android initiates
+    |        (passkey = 123456)             |
+    |<------ Auth Complete ─────────────────|  authGood = true in firmware
+    |                                       |
+    |------- Discover Services ────────────>|
+    |<------ Services List ─────────────────|
+    |                                       |
+    |------- Find COMM Characteristic ─────>|  UUID: b9064764-...
+    |<------ Characteristic Found ──────────|
+    |                                       |
+    |------- Write CCCD (enable notify) ───>|  0x01 0x00 → CCCD descriptor
+    |<------ Descriptor Written ────────────|
+    |                                       |
+    |  *** CONNECTION READY — COMMANDS ACCEPTED ***
+    |                                       |
+    |------- Write Characteristic ─────────>|  14 bytes × 8 circuits per write
+    |<------ Write Response ────────────────|  confirms receipt
+    |                                       |
+    |<------ Notification ──────────────────|  PCM sends status updates
 ```
 
-### Characteristic Write Type
+### Circuit Command Packet Format
 
-The app uses **Write With Response** (`WRITE_TYPE_DEFAULT`) to confirm each command was received by the PCM board.
+Each circuit toggle generates one 14-byte CAN packet. All 8 circuit packets
+are concatenated and sent in a single BLE write (the firmware's `processCOMMData()`
+parses multiple `0x55`-delimited packets from one write).
+
+```
+Offset  Value        Description
+──────  ───────────  ─────────────────────────────────────────────────────
+  [0]   0x55         Packet delimiter — signals start of packet
+  [1]   0x0C (12)    Length field = total packet length − 2
+  [2]   0x00         Packet type = CAN_PACKET
+  [3]   0x00         Unused spacer byte
+  [4]   0x00         Unused spacer byte
+  [5]   0x80 | addr  SWITCH_PACKET flag (0x80) OR'd with PCM address (0–3)
+  [6]   canEncoding  Circuit number in CAN bus encoding (see table below)
+  [7]   outCmd       0xFF = ON,  0x00 = OFF
+  [8]   0x00         blinkOn  — 0 = no blinking
+  [9]   0x00         blinkOff — 0 = no blinking
+[10]    CRC & 0xFF   CRC32 LSB  ┐
+[11]    CRC >> 8     CRC32      │  IEEE 802.3 CRC32 of bytes [0..9],
+[12]    CRC >> 16    CRC32      │  stored little-endian
+[13]    CRC >> 24    CRC32 MSB  ┘
+```
+
+### CAN Circuit Encoding
+
+The firmware uses a non-sequential bit-mask encoding for circuit indices
+(see `libraries/spod_library/src/common.cpp :: iToCan()`):
+
+| Circuit (0-based) | UI Label | CAN encoding byte |
+|---|---|---|
+| 0 | Circuit 1 | `0x08` |
+| 1 | Circuit 2 | `0x10` |
+| 2 | Circuit 3 | `0x20` |
+| 3 | Circuit 4 | `0x40` |
+| 4 | Circuit 5 | `0x80` |
+| 5 | Circuit 6 | `0x01` |
+| 6 | Circuit 7 | `0x02` |
+| 7 | Circuit 8 | `0x04` |
 
 ---
 
@@ -162,13 +227,21 @@ app/src/main/
 - Try moving closer to the device (RSSI < -90 dBm may cause missed advertisements)
 
 ### Connection fails immediately
-- Verify `SERVICE_UUID` in `BleConstants.kt` matches the PCM board's advertised service
 - Check Logcat with tag `SPOD_BLE` for detailed error messages
-- Some devices require pairing first — check bond state in the scan list
+- Some Android versions may show a pairing dialog — accept it and enter passkey `123456`
+
+### Commands sent but circuits do not respond
+This is almost always an authentication issue. The firmware silently drops all
+COMM writes if `authGood` is false:
+1. Check that BLE pairing completed successfully (bond state should be BONDED)
+2. If previously bonded but not working, try removing the device from Android's
+   Bluetooth settings and re-pair
+3. Enable Logcat (`adb logcat -s SPOD_BLE`) and look for
+   `"comm::onWrite() -- authGood=0"` — if present, pairing is needed
 
 ### Characteristic write fails
-- Verify `CHARACTERISTIC_UUID` is correct and has WRITE properties
-- Ensure the PCM firmware is running and accepting commands
+- Ensure `CHARACTERISTIC_UUID` matches the COMM characteristic
+- Verify connection state is `READY` (after notification enable completes)
 - Check the debug log panel in the Control screen for write errors
 
 ### Auto-reconnect not working
@@ -199,14 +272,11 @@ Log levels:
 
 ## Testing Without Hardware
 
-To test the UI without a real PCM board:
-
 1. Use [nRF Connect for Mobile](https://play.google.com/store/apps/details?id=no.nordicsemi.android.mcp) to simulate a BLE peripheral
-2. Create a custom service with UUID `0000ffe0-0000-1000-8000-00805f9b34fb`
-3. Add a characteristic `0000ffe1-...` with Read/Write/Notify properties
-4. Connect from the app and send circuit toggle commands
-
-Alternatively, use the [LightBlue](https://play.google.com/store/apps/details?id=com.punchthrough.lightblueexplorer) app as a virtual peripheral.
+2. Create a custom service with UUID `7e3af9ec-8c0d-447b-8404-e99f6056685b`
+3. Add a characteristic `b9064764-4c00-4c6f-a65b-ec02646fc6f4` with Read/Write/Notify properties
+4. Connect from the app — note: simulated peripherals do not require pairing, so `authGood`
+   enforcement is bypassed in hardware testing only
 
 ---
 

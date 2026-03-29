@@ -359,11 +359,30 @@ object BleManager {
     // ── Writing Commands ─────────────────────────────────────────────────────
 
     /**
-     * Send a circuit command to the PCM board.
+     * Send circuit ON/OFF commands to the PCM board.
      *
-     * @param circuitStateByte A byte where each bit represents a circuit:
-     *   - Bit 0 (LSB) = Circuit 1
-     *   - Bit 7 (MSB) = Circuit 8
+     * The firmware (pcm/ble.cpp :: processCOMMData / processCANPacket) expects
+     * one COMM CAN-packet per circuit, packed into a single BLE write.
+     * Each 14-byte packet has the structure:
+     *
+     *   [0]     = 0x55          — packet delimiter
+     *   [1]     = 0x0C (12)     — length field  (total bytes − 2)
+     *   [2]     = 0x00          — CAN_PACKET type
+     *   [3]     = 0x00          — unused (spacer)
+     *   [4]     = 0x00          — unused (spacer)
+     *   [5]     = 0x80 | addr   — SWITCH_PACKET flag | PCM address
+     *   [6]     = canEncoding   — circuit index in CAN bus encoding (see CAN_CIRCUIT_ENCODING)
+     *   [7]     = outCmd        — 0x00 = OFF, 0xFF = ON
+     *   [8]     = 0x00          — blinkOn  (0 = no blinking)
+     *   [9]     = 0x00          — blinkOff (0 = no blinking)
+     *   [10–13] = CRC32         — IEEE 802.3 CRC of bytes [0–9], stored little-endian
+     *
+     * All 8 circuit packets are concatenated into one write; the firmware's parser
+     * iterates through the buffer finding each 0x55 delimiter independently.
+     *
+     * @param circuitStateByte A byte where each bit represents a circuit's state:
+     *   - Bit 0 (LSB) = Circuit 1 (index 0)
+     *   - Bit 7 (MSB) = Circuit 8 (index 7)
      *   - 1 = ON, 0 = OFF
      */
     @Suppress("DEPRECATION")
@@ -382,16 +401,61 @@ object BleManager {
             return
         }
 
+        // Build 8 individual CAN packets (one per circuit) concatenated into one write.
+        val packetSize = 14          // bytes per circuit packet
+        val payload = ByteArray(packetSize * BleConstants.NUM_CIRCUITS)
+        val stateInt = circuitStateByte.toInt() and 0xFF
+
+        for (circuit in 0 until BleConstants.NUM_CIRCUITS) {
+            val offset = circuit * packetSize
+            val isOn = (stateInt shr circuit) and 0x01 == 1
+            val outCmd = if (isOn) BleConstants.OUT_CMD_ON else BleConstants.OUT_CMD_OFF
+            val canByte = BleConstants.CAN_CIRCUIT_ENCODING[circuit].toByte()
+            val addrByte = (BleConstants.SWITCH_PACKET or BleConstants.PCM_ADDRESS).toByte()
+
+            // Bytes 0–9 (the portion covered by CRC)
+            payload[offset + 0] = BleConstants.PACKET_DELIMITER          // 0x55
+            payload[offset + 1] = 0x0C.toByte()                          // length field = 14 - 2
+            payload[offset + 2] = BleConstants.CAN_PACKET_TYPE           // 0x00
+            payload[offset + 3] = 0x00                                   // spacer
+            payload[offset + 4] = 0x00                                   // spacer
+            payload[offset + 5] = addrByte                               // SWITCH_PACKET | addr
+            payload[offset + 6] = canByte                                // CAN circuit encoding
+            payload[offset + 7] = outCmd                                 // ON or OFF
+            payload[offset + 8] = 0x00                                   // blinkOn  (no blink)
+            payload[offset + 9] = 0x00                                   // blinkOff (no blink)
+
+            // CRC32 over bytes [offset+0 .. offset+9] — IEEE 802.3 (same as java.util.zip.CRC32)
+            val crc = computeCrc32(payload, offset, 10)
+            payload[offset + 10] = (crc and 0xFF).toByte()              // LSB
+            payload[offset + 11] = ((crc shr 8) and 0xFF).toByte()
+            payload[offset + 12] = ((crc shr 16) and 0xFF).toByte()
+            payload[offset + 13] = ((crc shr 24) and 0xFF).toByte()    // MSB
+        }
+
         characteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
-        characteristic.value = byteArrayOf(circuitStateByte)
+        characteristic.value = payload
 
         val success = gatt.writeCharacteristic(characteristic)
         if (success) {
             _circuitStates.value = circuitStateByte
-            Logger.tx(TAG, "Sent circuit command: 0x${"%02X".format(circuitStateByte)}")
+            val hex = payload.joinToString(" ") { "0x%02X".format(it) }
+            Logger.tx(TAG, "Sent circuit command: 0x${"%02X".format(circuitStateByte)} → $hex")
         } else {
             Logger.error(TAG, "Failed to initiate characteristic write")
         }
+    }
+
+    /**
+     * Compute IEEE 802.3 (standard Ethernet / zlib) CRC32 of [length] bytes
+     * starting at [offset] within [data].
+     *
+     * This matches the firmware's crc32() implementation in crc32.cpp.
+     */
+    private fun computeCrc32(data: ByteArray, offset: Int, length: Int): Long {
+        val crc = java.util.zip.CRC32()
+        crc.update(data, offset, length)
+        return crc.value
     }
 
     // ── Auto-Reconnect ───────────────────────────────────────────────────────

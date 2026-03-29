@@ -231,13 +231,16 @@ object BleManager {
 
             when (newState) {
                 BluetoothProfile.STATE_CONNECTED -> {
-                    Logger.info(TAG, "GATT connected, discovering services...")
+                    Logger.info(TAG, "GATT connected, requesting MTU...")
                     _connectionState.value = ConnectionState.CONNECTED
                     reconnectAttempts = 0
 
+                    // Request a larger ATT MTU so that all 8 circuit packets (112 bytes)
+                    // fit in a single GATT write. The firmware sets its MTU to 512;
+                    // Android's maximum supported ATT PDU is 517 bytes.
+                    // Service discovery is deferred to onMtuChanged.
                     mainHandler.post {
-                        gatt.discoverServices()
-                        _connectionState.value = ConnectionState.DISCOVERING_SERVICES
+                        gatt.requestMtu(517)
                     }
                 }
 
@@ -259,6 +262,17 @@ object BleManager {
                     }
                 }
             }
+        }
+
+        override fun onMtuChanged(gatt: BluetoothGatt, mtu: Int, status: Int) {
+            if (status == BluetoothGatt.GATT_SUCCESS) {
+                Logger.info(TAG, "MTU changed to $mtu bytes — proceeding to discover services")
+            } else {
+                Logger.warn(TAG, "MTU request failed (status=$status), proceeding with default MTU")
+            }
+            // Always proceed to service discovery whether or not the MTU request succeeded.
+            _connectionState.value = ConnectionState.DISCOVERING_SERVICES
+            gatt.discoverServices()
         }
 
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {

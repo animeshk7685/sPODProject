@@ -1,0 +1,3951 @@
+/* ========================================
+ *
+ * Copyright Star Technologies, 2016
+ * All Rights Reserved
+ * UNPUBLISHED, LICENSED SOFTWARE.
+ *
+ * CONFIDENTIAL AND PROPRIETARY INFORMATION
+ * WHICH IS THE PROPERTY OF STAR TECHNOLOGIES.
+ *
+ *  Author: Luke Williams
+ *
+ *  Version 1.00    12-16-2017
+ *  Version 1.01    12-19-2017
+ *  Version 1.02    12-26-2017
+ *  Version 1.03    01-11-2017
+ *  Version 1.04    01-11-2017
+ *  Version 1.05    01-15-2017
+ *  Version 1.06    01-15-2017
+ *
+ * ========================================
+*/
+#include <project.h>
+#include <stdbool.h>
+//#include <math.h>
+
+#include <stdlib.h>
+#include <stdio.h>
+#include "myPrintf.h"
+
+#include "stdDrivers.h"
+
+#include "mcpCan.h"
+#include "pt.h"
+#include "timer.h"
+
+#include "ota_mandatory.h"
+
+void saveSettings();
+
+void StackEventHandler( uint32 eventCode, void *eventParam);
+
+//1ms
+#define NUMBER_OF_TICKS		 48000
+
+
+
+extern void InitializeBootloaderSRAM(void);
+
+static uint32 crc32_tab[] = {
+	0x00000000, 0x77073096, 0xee0e612c, 0x990951ba, 0x076dc419, 0x706af48f,
+	0xe963a535, 0x9e6495a3, 0x0edb8832, 0x79dcb8a4, 0xe0d5e91e, 0x97d2d988,
+	0x09b64c2b, 0x7eb17cbd, 0xe7b82d07, 0x90bf1d91, 0x1db71064, 0x6ab020f2,
+	0xf3b97148, 0x84be41de, 0x1adad47d, 0x6ddde4eb, 0xf4d4b551, 0x83d385c7,
+	0x136c9856, 0x646ba8c0, 0xfd62f97a, 0x8a65c9ec, 0x14015c4f, 0x63066cd9,
+	0xfa0f3d63, 0x8d080df5, 0x3b6e20c8, 0x4c69105e, 0xd56041e4, 0xa2677172,
+	0x3c03e4d1, 0x4b04d447, 0xd20d85fd, 0xa50ab56b, 0x35b5a8fa, 0x42b2986c,
+	0xdbbbc9d6, 0xacbcf940, 0x32d86ce3, 0x45df5c75, 0xdcd60dcf, 0xabd13d59,
+	0x26d930ac, 0x51de003a, 0xc8d75180, 0xbfd06116, 0x21b4f4b5, 0x56b3c423,
+	0xcfba9599, 0xb8bda50f, 0x2802b89e, 0x5f058808, 0xc60cd9b2, 0xb10be924,
+	0x2f6f7c87, 0x58684c11, 0xc1611dab, 0xb6662d3d, 0x76dc4190, 0x01db7106,
+	0x98d220bc, 0xefd5102a, 0x71b18589, 0x06b6b51f, 0x9fbfe4a5, 0xe8b8d433,
+	0x7807c9a2, 0x0f00f934, 0x9609a88e, 0xe10e9818, 0x7f6a0dbb, 0x086d3d2d,
+	0x91646c97, 0xe6635c01, 0x6b6b51f4, 0x1c6c6162, 0x856530d8, 0xf262004e,
+	0x6c0695ed, 0x1b01a57b, 0x8208f4c1, 0xf50fc457, 0x65b0d9c6, 0x12b7e950,
+	0x8bbeb8ea, 0xfcb9887c, 0x62dd1ddf, 0x15da2d49, 0x8cd37cf3, 0xfbd44c65,
+	0x4db26158, 0x3ab551ce, 0xa3bc0074, 0xd4bb30e2, 0x4adfa541, 0x3dd895d7,
+	0xa4d1c46d, 0xd3d6f4fb, 0x4369e96a, 0x346ed9fc, 0xad678846, 0xda60b8d0,
+	0x44042d73, 0x33031de5, 0xaa0a4c5f, 0xdd0d7cc9, 0x5005713c, 0x270241aa,
+	0xbe0b1010, 0xc90c2086, 0x5768b525, 0x206f85b3, 0xb966d409, 0xce61e49f,
+	0x5edef90e, 0x29d9c998, 0xb0d09822, 0xc7d7a8b4, 0x59b33d17, 0x2eb40d81,
+	0xb7bd5c3b, 0xc0ba6cad, 0xedb88320, 0x9abfb3b6, 0x03b6e20c, 0x74b1d29a,
+	0xead54739, 0x9dd277af, 0x04db2615, 0x73dc1683, 0xe3630b12, 0x94643b84,
+	0x0d6d6a3e, 0x7a6a5aa8, 0xe40ecf0b, 0x9309ff9d, 0x0a00ae27, 0x7d079eb1,
+	0xf00f9344, 0x8708a3d2, 0x1e01f268, 0x6906c2fe, 0xf762575d, 0x806567cb,
+	0x196c3671, 0x6e6b06e7, 0xfed41b76, 0x89d32be0, 0x10da7a5a, 0x67dd4acc,
+	0xf9b9df6f, 0x8ebeeff9, 0x17b7be43, 0x60b08ed5, 0xd6d6a3e8, 0xa1d1937e,
+	0x38d8c2c4, 0x4fdff252, 0xd1bb67f1, 0xa6bc5767, 0x3fb506dd, 0x48b2364b,
+	0xd80d2bda, 0xaf0a1b4c, 0x36034af6, 0x41047a60, 0xdf60efc3, 0xa867df55,
+	0x316e8eef, 0x4669be79, 0xcb61b38c, 0xbc66831a, 0x256fd2a0, 0x5268e236,
+	0xcc0c7795, 0xbb0b4703, 0x220216b9, 0x5505262f, 0xc5ba3bbe, 0xb2bd0b28,
+	0x2bb45a92, 0x5cb36a04, 0xc2d7ffa7, 0xb5d0cf31, 0x2cd99e8b, 0x5bdeae1d,
+	0x9b64c2b0, 0xec63f226, 0x756aa39c, 0x026d930a, 0x9c0906a9, 0xeb0e363f,
+	0x72076785, 0x05005713, 0x95bf4a82, 0xe2b87a14, 0x7bb12bae, 0x0cb61b38,
+	0x92d28e9b, 0xe5d5be0d, 0x7cdcefb7, 0x0bdbdf21, 0x86d3d2d4, 0xf1d4e242,
+	0x68ddb3f8, 0x1fda836e, 0x81be16cd, 0xf6b9265b, 0x6fb077e1, 0x18b74777,
+	0x88085ae6, 0xff0f6a70, 0x66063bca, 0x11010b5c, 0x8f659eff, 0xf862ae69,
+	0x616bffd3, 0x166ccf45, 0xa00ae278, 0xd70dd2ee, 0x4e048354, 0x3903b3c2,
+	0xa7672661, 0xd06016f7, 0x4969474d, 0x3e6e77db, 0xaed16a4a, 0xd9d65adc,
+	0x40df0b66, 0x37d83bf0, 0xa9bcae53, 0xdebb9ec5, 0x47b2cf7f, 0x30b5ffe9,
+	0xbdbdf21c, 0xcabac28a, 0x53b39330, 0x24b4a3a6, 0xbad03605, 0xcdd70693,
+	0x54de5729, 0x23d967bf, 0xb3667a2e, 0xc4614ab8, 0x5d681b02, 0x2a6f2b94,
+	0xb40bbe37, 0xc30c8ea1, 0x5a05df1b, 0x2d02ef8d
+};
+
+uint32 crc32(uint32 crc, const void *buf, size_t size)
+{
+	const uint8_t *p;
+
+	p = buf;
+	crc = crc ^ ~0U;
+
+	while (size--)
+		crc = crc32_tab[(crc ^ *p++) & 0xFF] ^ (crc >> 8);
+
+	return crc ^ ~0U;
+}
+
+mcpCan can;
+
+struct state {
+  char *name;
+  struct pt pt;
+  struct timer timer;
+};
+
+//typedef struct settings
+//{
+//    uint8 appSourceAddress;
+//    uint8 sourceAddress;
+//    uint16 pin;
+//    uint8 sleepTimer;
+//    uint32 crc;
+//    
+//}tSettings;
+
+//tSettings settingsStruct;
+//tSettings* settings = &settingsStruct;
+
+struct output {
+    uint16  outCmd;
+    uint16  output;         
+    uint8   open;
+    uint16  blinkOn;
+    uint16  blinkOff;
+    adcVals current;        // in amps
+    uint32  timer;
+    uint32  onTime;
+    uint32  shortDelay;
+};
+
+struct proMode {
+    bool    isEnabled;
+    bool    isWritable;
+    bool    isDisableSleep;
+    bool    alwaysOn[8];
+    uint8   lastSwVal[8];
+    uint16  timers[8];
+    uint32  curTime[8];
+};
+
+struct canBuffer {
+    uint8_t rx_buf[5];
+};
+
+struct status{
+    bool    debug;
+ //   bool    lowBat;
+    bool    ignCh0;
+    bool    ignCh1;
+    uint8   address;        // 0x80 - 0x83
+    bool    ignSense;
+    bool    inputs[8];
+    adcVals batVolt;        // in volts
+    adcVals temp;
+    bool    leds;
+    bool    lvBypass;
+    bool    tempEdge;
+    struct  output out[8];
+    struct  proMode pro;
+};
+
+struct canErr{
+    uint16 rebootCnt;
+    uint16 wdtCnt;
+    uint32 canErrCnt;
+    uint32 canRstCnt;
+    uint16 canErrMore;
+    uint16 canRstMore;
+    uint16 canRstTryCnt;
+};
+
+static struct canErr canErr;
+
+enum sPOD_Device_Type {
+    BANTAM_V1,
+    TOUCHSCREEN_V1,
+    SWITCH_HD_V1
+};
+
+#define DEVICE_TYPE BANTAM_V1
+
+uint8 lastTemp[4] = {0};
+uint8 lastBatt[4] = {0};
+
+uint8 lastSwitchValue[32] = {0};
+uint8 lastOutputState[32] = {0};
+uint16 lastOutputValue[32] = {0};
+uint32 passkey = 1234;
+
+<<<<<<< HEAD
+=======
+//const uint8_t eepromBlock[CY_FLASH_SIZEOF_ROW * 1] CY_ALIGN(CY_FLASH_SIZEOF_ROW) = {0};
+////const uint8_t eepromBlock[CY_FLASH_SIZEOF_ROW * 1] CY_SECTION(".cy_checksum_exclude") = {0};
+//
+//uint32_t localEeprom[CY_FLASH_SIZEOF_ROW/4] = {0};
+
+>>>>>>> SB-35-implement-ota-updating-in-app
+uint8 canState;
+
+//enum open {OUTPUT_OPEN, OUTPUT_OFF, OUTPUT_SHORT, OUTPUT_NOM, OUTPUT_FAULT, OUTPUT_STROBE, OUTPUT_FLASH};
+enum open {
+    OUTPUT_OFF = 0, 
+    OUTPUT_OPEN = 1, 
+    OUTPUT_NOM = 2,
+    
+    OUTPUT_FAULT = 4, 
+    OUTPUT_FLASH = 5, 
+    OUTPUT_STROBE = 6, 
+    OUTPUT_BLINK = 7, 
+    
+    OUTPUT_SHORT = 8 
+};
+
+enum canState {CAN_LISTEN, SYSTEM_UPDATE, OUTPUTS_1, OUTPUTS_2, CAN_DEBUG};
+
+static struct status status;
+
+uint8_t sourceConnected[4] = {0};
+uint32_t srcConnTimer[4] = {0};
+
+uint32 ioAddress1 = 0x20;
+uint32 ioAddress2 = 0x24;
+bool isConnected = 0;
+bool sendNotifications = 0;
+bool pairingNeeded = 0;
+bool pinGenerationNeeded = 0;
+bool pinClearNeeded = 0;
+uint16 tempPin = 0;
+uint8 i2cBuffer[3];
+
+uint8 bleRxBuffer[32];
+uint8 bleTxBuffer[20];
+
+uint32 aliveTimer = 0;
+uint32 switchTimer = 0;
+uint32 switchDelay = 0;
+uint32 debugTimer = 0;
+uint32 systemTimer = 0;
+uint32 proTimer = 0;
+
+bool isAwake = 1;
+bool wasAsleep = 0;
+bool overheated = 0;
+bool is12v_not24 = 1;
+bool catastophic_fault = 0;
+
+bool overheated2 = 0;
+
+volatile uint32 ticks = 0;
+
+
+#define SWITCH_PACKET   0x80
+#define DEBUG_PACKET    0x90
+#define SYSTEM_PACKET   0xA0
+#define STATUS_PACKET   0xB0
+#define PRO_PACKET      0xC0
+#define CONNECTED       0x7E
+#define SWITCH_ADDR     0x53
+#define SWITCH_DATA_BUFFER_SIZE 5
+
+#define FLASH_SPEED     20      // __ms = 1 "tick"
+#define SHUTOFF_TEMP    125.0   // in deg C, max 150C
+
+
+#define WDT_INTERVAL_1S             250u                       /* millisecond */
+#define ILO_FREQ                    32768     
+
+#define EDGE_12V_24V    (20.0)      // system above this voltage will be treated as a 24V system
+
+volatile uint8 wdtIsrCount = 0;
+         
+
+volatile struct canBuffer can_buf[16];
+
+volatile uint8_t canBufLoad = 0;
+volatile uint8_t canBufRead = 0;
+
+uint8_t tx_buffer[5] = {0x00};
+uint8_t rx_buffer[5] = {0x00};
+uint8 bytesRead = 0;
+
+void InitBrownout(uint32_t lvd_volt);
+void InitWatchdog(uint16 reset_interval);
+void resetWatchdog(void);
+
+uint32 millis(void);
+void printStatus(void);
+
+unsigned int rand_interval(unsigned int min, unsigned int max);
+void generatePasskey(void);
+uint32 readPasskey(void);
+void writePassKey(uint32 thisKey);
+void write_millis(void);
+
+int16 adc_off;
+
+void enterBootloader(void);
+
+<<<<<<< HEAD
+char currState = '0';
+=======
+void writeFlash(void);
+>>>>>>> SB-35-implement-ota-updating-in-app
+
+/* ISR prototype declaration */
+CY_ISR_PROTO(USER_ISR);
+
+
+CY_ISR(USER_ISR)
+{
+    ticks++;
+}
+
+CY_ISR_PROTO(CANRX_ISR);
+
+CY_ISR(CANRX_ISR)
+{    
+    CANINT_ClearInterrupt();
+
+    uint8 canStatus = mcpCanReadMsgBuf(&can, &bytesRead, (uint8_t *)(can_buf[canBufLoad].rx_buf));
+    
+//    if((can_buf[canBufLoad].rx_buf[0] & 0xF0) == 0x80)
+//    {
+//    
+//        myPrintf("C: (%x %d) %x %x %x %x %x ", canBufLoad, canStatus, can_buf[canBufLoad].rx_buf[0], can_buf[canBufLoad].rx_buf[1],
+//                can_buf[canBufLoad].rx_buf[2], can_buf[canBufLoad].rx_buf[3], can_buf[canBufLoad].rx_buf[4]);
+//        write_millis();
+//    
+//    }
+    
+    if(canStatus == CAN_OK)
+    {
+        canBufLoad++;
+        canBufLoad = canBufLoad % 16;
+    }
+    
+    if(mcpCanCheckError() != CAN_OK)
+    {
+        mcpCanClearError();   
+    } 
+    
+}
+
+
+CY_ISR_PROTO(WDT_ISR);
+
+bool needsWriteFlash = 0;
+
+CY_ISR(WDT_ISR)
+{     
+    myPrintf("WDT %d(%c): ", wdtIsrCount, currState);
+    write_millis();
+    
+    canErr.wdtCnt++;
+    
+//    resetWatchdog();
+    
+//    CySysWdtDisable(CY_SYS_WDT_COUNTER0_MASK);
+    
+    if(wdtIsrCount == 0)
+    {
+        CySysWdtClearInterrupt(CY_SYS_WDT_COUNTER0_INT);  
+        
+//        CySysWdtDisable(CY_SYS_WDT_COUNTER0_MASK);
+        
+        writeFlash();
+    }
+    else
+    {        
+        
+        ISR_WDT_Stop();
+    }
+    wdtIsrCount++;
+}
+
+
+CY_ISR_PROTO(LVD_ISR);
+
+CY_ISR(LVD_ISR)
+{     
+    myPrintf("LVD: ");
+    write_millis();
+
+    
+    ISR_LVD_Stop();
+    CySysLvdClearInterrupt();   
+    
+    while(1);       // sys tick is overridden by this
+    
+}
+
+void InitWatchdog(uint16 reset_interval)
+{
+    
+    wdtIsrCount = 0;
+    
+    /*==============================================================================*/
+    /* configure counter 0 for system reset                                         */
+    /*==============================================================================*/
+    /* Counter 0 of watchdog generates peridically interrupt and a 
+       reset is generated on the the third unhandled interrupt */
+    CySysWdtWriteMode(CY_SYS_WDT_COUNTER0, CY_SYS_WDT_MODE_INT_RESET);
+    /* Set interval as desired value */
+	CySysWdtWriteMatch(CY_SYS_WDT_COUNTER0, (((uint32)(reset_interval * ILO_FREQ))/1000));
+    /* clear counter on match event */
+	CySysWdtWriteClearOnMatch(CY_SYS_WDT_COUNTER0, 1u);
+    
+    /*==============================================================================*/
+    /* enable watchdog                                                              */
+    /*==============================================================================*/
+    /* enable the counter 0 */
+    CySysWdtEnable(CY_SYS_WDT_COUNTER0_MASK);
+    /* check if counter 0 is enabled, otherwise keep looping here */
+    while(!CySysWdtReadEnabledStatus(CY_SYS_WDT_COUNTER0));
+    
+        /* connect ISR routine to Watchdog interrupt */
+    ISR_WDT_StartEx(WDT_ISR);
+    /* set the highest priority to make ISR execute in all condition */
+    ISR_WDT_SetPriority(0);
+}
+
+void InitBrownout(uint32_t lvd_volt)
+{
+    CySysLvdEnable(lvd_volt);
+    
+    ISR_LVD_StartEx(LVD_ISR);
+    
+    ISR_LVD_SetPriority(2);
+}
+
+void resetWatchdog(void)
+{
+    CySysWdtResetCounters(CY_SYS_WDT_COUNTER0_RESET);  
+            /* clearing watchdog counter requires several LFCLK cycles to take effect */
+    CyDelayUs(150);
+    
+    wdtIsrCount = 0;
+}
+
+
+uint32 millis(){
+    return ticks;
+}
+
+
+
+unsigned int rand_interval(unsigned int min, unsigned int max) 
+{
+	unsigned int r;
+	const unsigned int range = 1 + max - min;
+	const unsigned int buckets = RAND_MAX/range;
+	const unsigned int limit = buckets * range;
+
+	do
+	{
+		r = rand();
+	}while (r >= limit);
+
+	return min + (r/buckets);
+}
+
+const uint8_t eepromBlock[CY_FLASH_SIZEOF_ROW * 1] CY_ALIGN(CY_FLASH_SIZEOF_ROW) = {0};
+<<<<<<< HEAD
+
+
+=======
+>>>>>>> SB-35-implement-ota-updating-in-app
+
+#define EEPROM_FLASH_ADDR_ROW           (((int)eepromBlock - CY_FLASH_BASE) / CY_FLASH_SIZEOF_ROW)
+#define PASSKEY_OFFSET                  (0)     // offsets in bytes, divide by (_t/8) for other data sizes
+#define PASS_INIT_OFFSET                (4)
+#define PRO_MODE_OFFSET                 (8)
+<<<<<<< HEAD
+#define PRO_WRITABLE_OFFSET             (9)
+#define PRO_SLEEPDISABLED_OFFSET        (10)
+#define PRO_ALWAYSON_OFFSET             (16)
+#define PRO_LASTSWVAL_OFFSET            (24)
+#define PRO_TIMERS_OFFSET               (32)
+=======
+#define PRO_ALWAYSON_OFFSET             (16)
+#define PRO_TIMERS_OFFSET               (24)
+#define CAN_ERR_CNT                     (56)
+#define CAN_RST_CNT                     (60)
+#define DEV_RST_CNT                     (64)
+#define WDT_CNT                         (68)
+
+#define CAN_ERR_MRE                     (70)
+#define CAN_RST_MRE                     (72)
+#define CAN_RST_TRY                     (74)
+>>>>>>> SB-35-implement-ota-updating-in-app
+
+
+CYBLE_GAP_BD_ADDR_T clearAllDevices = {{0,0,0,0,0,0},0};
+
+#define PASS_DBG_TIMEOUT    30000       //    (30 * 1000)
+#define PASSKEY_TIMEOUT     180000      //(3 * 60 * 1000)
+
+static uint32_t passkeyTimer = 0;
+static bool passkey_init = false;
+
+<<<<<<< HEAD
+static bool proIsTempWritable = false;
+
+void writeFlash(void);
+=======
+
+>>>>>>> SB-35-implement-ota-updating-in-app
+
+void generatePasskey(void)
+{
+    CYBLE_API_RESULT_T apiResult = CYBLE_ERROR_OK;
+   
+    
+    myPrintf("Prepare to wipe bonding\n");
+    
+        if(CyBle_GetState() == CYBLE_STATE_ADVERTISING)
+        {
+            CyBle_GappStopAdvertisement ();
+        } 
+        
+        
+    CyBle_GapDisconnect(cyBle_connHandle.bdHandle);
+    
+//    write_millis();
+    
+    while (CyBle_GetState() == CYBLE_STATE_CONNECTED)
+ 	{
+ 	    CyBle_ProcessEvents();
+ 	}
+    
+//    write_millis();
+    
+    apiResult = CyBle_GapRemoveDeviceFromWhiteList(&clearAllDevices);
+    
+    if(apiResult != CYBLE_ERROR_OK)
+    {
+        myPrintf("ERR: CyBle_GapRemoveDeviceFromWhiteList() %d\n", apiResult);
+    }
+    
+    while(CYBLE_ERROR_OK != CyBle_StoreBondingData(1));
+        
+
+    
+    
+    passkey = rand_interval(1, 999999);
+    
+    passkey_init = true;
+    
+<<<<<<< HEAD
+=======
+//    localEeprom[PASSKEY_OFFSET] = passkey;
+////    localEeprom[PASS_INIT_OFFSET] = passkey_init;
+//    
+//    CySysFlashWriteRow(EEPROM_FLASH_ADDR_ROW, (const unsigned char *) localEeprom);
+    
+>>>>>>> SB-35-implement-ota-updating-in-app
+    writeFlash();
+    
+    CyBle_GapFixAuthPassKey(1, passkey);
+    writePassKey(passkey);
+    passkeyTimer = millis();
+    
+    myPrintf("Generate new passkey: %d\n", passkey);
+    
+    
+    
+    apiResult = CyBle_GappStartAdvertisement(CYBLE_ADVERTISING_FAST);
+    
+//    if(apiResult != CYBLE_ERROR_OK)
+//    {
+//        myPrintf("ERR: CyBle_GappStartAdvertisement() %d\n", apiResult);
+//    }
+}
+
+void write_millis(void)
+{
+    uint32_t ms = millis();
+    
+    myPrintf("(");
+    
+    if(ms/3600000)
+    myPrintf("%d:",(ms/3600000));
+    
+    ms = ms % 3600000;
+    
+    if(ms/60000)
+    myPrintf("%d:",(ms/60000));
+    
+    ms = ms % 60000;
+    
+    if(ms/10000 == 0)
+    myPrintf("0");
+    
+    myPrintf("%d.",(ms/1000));
+    
+    ms = ms % 1000;
+    
+    if(ms/100 == 0)
+    myPrintf("0");
+    
+    if(ms/10 == 0)
+    myPrintf("0");
+    
+    myPrintf("%d)\n",ms);
+    
+}
+
+uint32 readPasskey(void)
+{
+    uint32_t* tempArray = (void *) eepromBlock;
+    
+    passkey = tempArray[PASSKEY_OFFSET / 4];
+    
+//    passkey_init = tempArray[PASS_INIT_OFFSET / 4];
+    
+    myPrintf("Read passkey: %d\n", passkey);
+    
+    return passkey;
+}
+
+bool readProFlash(void)
+{
+<<<<<<< HEAD
+    uint16_t* tempArray_uint16 = (void *) eepromBlock;
+    uint8_t* tempArray_uint8 = (void *) eepromBlock;
+=======
+    uint32_t* tempArray_uint32 = (void *) eepromBlock;
+    uint16_t* tempArray_uint16 = (void *) eepromBlock;
+    uint8_t* tempArray_uint8 = (void *) eepromBlock;
+     
+    canErr.canErrCnt = tempArray_uint32[CAN_ERR_CNT/4];
+    canErr.canRstCnt = tempArray_uint32[CAN_RST_CNT/4];
+    canErr.rebootCnt = tempArray_uint16[DEV_RST_CNT/2];
+    canErr.wdtCnt = tempArray_uint16[WDT_CNT/2];
+    
+    canErr.canErrMore = tempArray_uint16[CAN_ERR_MRE/2];
+    canErr.canRstMore = tempArray_uint16[CAN_RST_MRE/2];
+    canErr.canRstTryCnt = tempArray_uint16[CAN_RST_TRY/2];
+    
+   // return;
+//    status.pro.enabled = tempArray_uint8[PRO_MODE_OFFSET];
+//
+//    if(status.pro.enabled)
+//    {
+//        for(int i = 0 ; i < 8 ; i++)
+//        {
+//            status.pro.alwaysOn[i] = tempArray_uint8[PRO_ALWAYSON_OFFSET + i];
+//            status.pro.timers[i] = tempArray_uint16[PRO_TIMERS_OFFSET / 2 + i];
+//            
+//            status.out[i].outCmd = status.pro.alwaysOn[i];
+//        }
+//    }
+//    
+//    return status.pro.enabled;
+
+    return 0;
+}
+
+uint8_t localEeprom[CY_FLASH_SIZEOF_ROW] = {0};
+uint8_t *localEeprom_uint8 = (uint8_t *)localEeprom;
+uint16_t *localEeprom_uint16 = (uint16_t *)localEeprom;
+uint32_t *localEeprom_uint32 = (uint32_t *)localEeprom;
+ 
+void writeFlash(void)
+{
+
+    
+    localEeprom_uint32[PASSKEY_OFFSET/4] = passkey;
+    
+    localEeprom_uint8[PASS_INIT_OFFSET] = passkey_init;
+    
+    localEeprom_uint32[CAN_ERR_CNT/4] = canErr.canErrCnt;
+    localEeprom_uint32[CAN_RST_CNT/4] = canErr.canRstCnt;
+    localEeprom_uint16[DEV_RST_CNT/2] = canErr.rebootCnt;
+    localEeprom_uint16[WDT_CNT/2] = canErr.wdtCnt;
+    
+    localEeprom_uint16[CAN_ERR_MRE/2] = canErr.canErrMore;
+    localEeprom_uint16[CAN_RST_MRE/2] = canErr.canRstMore;
+    localEeprom_uint16[CAN_RST_TRY/2] = canErr.canRstTryCnt;
+    
+//    if(status.pro.enabled)
+//    {   
+//        localEeprom_uint8[PRO_MODE_OFFSET] = status.pro.enabled ? 1 : 0;
+//        for(unsigned int i = 0 ; i < 8 ; i++)
+//        {
+//            localEeprom_uint8[PRO_ALWAYSON_OFFSET + i] = status.pro.alwaysOn[i];
+//            
+//            localEeprom_uint16[PRO_TIMERS_OFFSET/2 + i] = status.pro.timers[i];
+//        }
+//    }
+
+    CySysFlashWriteRow(EEPROM_FLASH_ADDR_ROW, (const unsigned char *) localEeprom);
+}
+
+void printStatus(void)
+{   
+    uint8 i;
+>>>>>>> SB-35-implement-ota-updating-in-app
+    
+    status.pro.isEnabled = tempArray_uint8[PRO_MODE_OFFSET];
+    
+    
+//    status.pro.isEnabled = 0;
+    if(status.pro.isEnabled)
+    {
+        status.pro.isWritable = tempArray_uint8[PRO_WRITABLE_OFFSET];
+        status.pro.isDisableSleep = tempArray_uint8[PRO_SLEEPDISABLED_OFFSET];
+    
+        proIsTempWritable = status.pro.isWritable;
+        
+        myPrintf("Pro Enabled\n");
+        for(int i = 0 ; i < 8 ; i++)
+        {
+            status.pro.alwaysOn[i] = tempArray_uint8[PRO_ALWAYSON_OFFSET + i];
+            status.pro.lastSwVal[i] = tempArray_uint8[PRO_LASTSWVAL_OFFSET + i];
+            status.pro.timers[i] = tempArray_uint16[PRO_TIMERS_OFFSET / 2 + i];
+            
+            if(status.pro.lastSwVal[i] == 0)
+                status.pro.lastSwVal[i] = 0xFF;
+            
+            status.out[i].outCmd = status.pro.alwaysOn[i] ? status.pro.lastSwVal[i] : 0x00;
+        }
+    }
+    else
+    {
+        myPrintf("pro not enabled\n");
+    }
+    
+    return status.pro.isEnabled;
+}
+
+uint8_t localEeprom[CY_FLASH_SIZEOF_ROW] = {0};
+uint8_t *localEeprom_uint8 = (uint8_t *)localEeprom;
+uint16_t *localEeprom_uint16 = (uint16_t *)localEeprom;
+uint32_t *localEeprom_uint32 = (uint32_t *)localEeprom;
+ 
+void writeFlash(void)
+{
+//    for(unsigned int i = 0 ; i < sizeof(passkey) ; i++)
+//    {
+//        localEeprom[PASSKEY_OFFSET + i] = passkey >> (8 * (3 - i)) & 0xff;
+////        localEeprom[PASSKEY_OFFSET + i] = passkey >> (8 * i) & 0xff;
+//    }
+    
+//    localEeprom[PASSKEY_OFFSET/2] = passkey >> 16 & 0xff;
+//    localEeprom[PASSKEY_OFFSET/2 + 1] = passkey & 0xff;
+    
+    localEeprom_uint32[PASSKEY_OFFSET/4] = passkey;
+    
+    localEeprom_uint8[PASS_INIT_OFFSET] = passkey_init;
+    
+    localEeprom_uint8[PRO_MODE_OFFSET] = status.pro.isEnabled ? 1 : 0;
+    
+    if(status.pro.isEnabled)
+    {   
+        localEeprom_uint8[PRO_WRITABLE_OFFSET] = status.pro.isWritable ? 1 : 0;
+        localEeprom_uint8[PRO_SLEEPDISABLED_OFFSET] = status.pro.isDisableSleep ? 1 : 0;
+        
+        for(unsigned int i = 0 ; i < 8 ; i++)
+        {
+            localEeprom_uint8[PRO_ALWAYSON_OFFSET + i] = status.pro.alwaysOn[i];
+            localEeprom_uint8[PRO_LASTSWVAL_OFFSET + i] = status.pro.lastSwVal[i];
+            
+            localEeprom_uint16[PRO_TIMERS_OFFSET/2 + i] = status.pro.timers[i];
+        }
+    }
+    
+    CySysFlashWriteRow(EEPROM_FLASH_ADDR_ROW, (const unsigned char *) localEeprom);
+}
+
+
+
+double approxRollingAverage (double avg, double new_sample, double window) {
+		double sub = avg / window;
+		double add = new_sample / window;
+	
+		//printf("%f, %f\n", sub,  add);
+	
+    avg = avg - sub;
+    avg = avg + add;
+
+    return avg;
+}
+
+uint32 offTimer[8] = {0};
+
+uint32 debugOnTimer = 0;
+
+PT_THREAD(readInputs(struct state *s))             
+{
+    static adcVals localCur;
+    static uint16 read;
+    static uint8 faults, newVal, lastVal;
+    static int i, j;
+    static double avgCurrentsDec[8];
+    static double avgCurrentsHex[8];
+    static uint32_t proShortTimer[8] = {0};
+    
+    static uint8 avgF = 3;
+//    static uint32 shortTimeout[8];
+    
+    static uint8_t debugCycle = 0;
+    static bool passDebug = true;
+    static bool outOn = false;
+    
+    static bool rstDebFlsh = false;
+    
+    PT_BEGIN(&s->pt);
+    while(1)                // 
+    {        
+        timer_set(&s->timer, 5);
+        PT_WAIT_UNTIL(&s->pt, timer_expired(&s->timer));
+        
+        
+        read = (uint16_t)read_inputs(0); 
+        
+        status.debug = read & DEBUG_MASK;
+        
+        
+        
+        if((debugCycle % 2) != status.debug)
+        {
+            debugCycle++;
+            
+            if(status.debug) {
+                debugOnTimer = millis();
+                passkeyTimer = millis();        // reset on rising edge of debug switch
+//                writePassKey(passkey);
+                
+                rstDebFlsh = true;
+            }
+            else if(rstDebFlsh)
+            {
+                canErr.rebootCnt = 1;
+                canErr.wdtCnt = 0;
+                canErr.canErrCnt = 0;
+                canErr.canRstCnt = 0;
+                
+                canErr.canErrMore = 0;
+                canErr.canRstMore = 0;
+                canErr.canRstTryCnt = 0;
+    
+            }
+        }
+        
+        if(passDebug)
+        {  
+            if(debugCycle > 3) {
+                generatePasskey();              // only regenerate if switch it tripped 4 times in the first 30s
+                passDebug = false; 
+            }
+            
+            if(millis() > PASS_DBG_TIMEOUT) {
+                passDebug = false;              
+            }
+        }
+        
+        
+//        status.leds = status.debug;
+        
+        status.ignCh0 = read & IGNCH0_MASK;
+        status.ignCh1 = read & IGNCH1_MASK;
+        
+        
+//        status.address = (read & ADD_MASK) >> 12;
+        
+//        if(status.address == 1){
+//            status.address = 2;
+//        } else if(status.address == 2){
+//            status.address = 1;
+//        }
+
+        status.ignSense = read & IGN_CTRL_MASK;
+        
+        if(isAwake && lastVal != (read & INPUTS_MASK))     // if an input has changed, update the corresponding output
+        {
+            for(i = 0 ; i < 8 ; i++)
+            {
+                newVal = (read >> (7-i)) & 0x01;
+                
+                if(status.out[i].shortDelay == 0)
+                {
+                
+                    if(status.inputs[i] < newVal)
+                    {
+                        status.out[i].outCmd = 0xFF;
+                        status.out[i].blinkOff = 0x00;
+                    }
+                    
+                    if(status.inputs[i] > newVal)
+                    {
+                        status.out[i].outCmd = 0x00;
+                        status.out[i].blinkOff = 0x00;
+                    }
+                
+                }
+                
+                status.inputs[i] = newVal;
+            }
+            
+            lastVal = read & INPUTS_MASK;
+        }
+        
+//        status.tempEdge = read & TEMP_EDGE_MASK;
+        status.tempEdge = TEMP_TRIG_Read();
+        
+        
+        timer_set(&s->timer, 5);
+        PT_WAIT_UNTIL(&s->pt, timer_expired(&s->timer));        
+        
+        
+        status.batVolt = vbat_read();
+        
+//        if((status.batVolt.dec >= 15.6 && status.batVolt.hex < 0xC0) || status.batVolt.dec >= 16.0)
+        if(status.batVolt.dec > 15.7)
+        {
+            is12v_not24 = 0;
+        }
+        else
+        {
+            is12v_not24 = 1;
+        }
+        
+        
+        status.temp = temp_read();
+        
+
+//        if(status.tempEdge)
+//        {
+        if(status.temp.dec >= SHUTOFF_TEMP)
+        {
+            overheated = 1;
+        }
+        else
+        {
+            overheated = 0;
+            overheated2 = 0;
+        }
+//        }
+//        else
+//        {
+//            overheated = 1;
+//        }
+        
+//        if(status.tempEdge)
+//        {
+//            overheated2 = 1;
+//        }
+//        else
+//        {
+//            overheated2 = 0;
+//        }
+
+        
+        faults = 0;
+        
+        for(i = 0; i < 8 ; i++)
+        {
+            outOn = 0;
+            
+            timer_set(&s->timer, 10);
+            PT_WAIT_UNTIL(&s->pt, timer_expired(&s->timer));
+            
+            pre_read(i);        // takes ~3ms
+            
+            if((status.out[i].blinkOff != 0) && (status.out[i].outCmd != 0))
+            {
+                j = 0;
+                
+                while(status.out[i].output == 0)                // if blink mode, wait for output to be on
+                {
+                    j++;
+                    
+                    timer_set(&s->timer, 1);
+                    PT_WAIT_UNTIL(&s->pt, timer_expired(&s->timer));
+                    
+                    if(j > 2500)
+                    {
+                        continue;
+                    }
+                }
+                
+                outOn = 1;
+            }
+        
+            timer_set(&s->timer, 10);
+            PT_WAIT_UNTIL(&s->pt, timer_expired(&s->timer));
+            
+            
+            localCur = out_current(i);      // read current
+            
+            
+            if((outOn == 1) && (status.out[i].output == 0))     // check blink didn't turn off while reading
+            {
+//                myPrintf("cont \n");
+                
+                i--;
+                continue;
+            }
+            
+           
+            if(status.out[i].blinkOff == 0 && ((status.out[i].outCmd == 0) || (status.out[i].outCmd == 0xFF))) // std (not blink)
+            {
+                
+                if((offTimer[i] == 0) || (millis() - offTimer[i] > 6000))
+                {
+                    avgF = 3;
+                }
+                else
+                {
+                    if(localCur.dec > 0.5)                  // filter out back emf fault
+                    {
+                        avgF = 100;
+                    }
+                    else
+                    {
+                        avgF = 3;
+                    }
+                }
+//                avgCurrentsDec[i] = approxRollingAverage(avgCurrentsDec[i], localCur.dec, 3);
+//                avgCurrentsHex[i] = approxRollingAverage(avgCurrentsHex[i], localCur.hex, 3);
+//                status.out[i].current.dec = avgCurrentsDec[i];
+//                status.out[i].current.hex = avgCurrentsHex[i];
+            }
+            else    // non-standard: flash, strobe, pwm
+            {
+                if(status.out[i].outCmd != 0)
+                { 
+                    if(status.out[i].outCmd < 0x80)         // ignore short protection on pwm < %50
+                    {
+                        localCur.dec = 0;
+                    }
+                    
+                    if(status.out[i].outCmd < 0xFE)         // scale pwm currents
+                    {
+                        localCur.hex = approxRollingAverage((localCur.hex * status.out[i].outCmd / 0xFF), localCur.hex, 5);
+                    }
+                    
+                    if(status.out[i].blinkOff != 0)         // scale blink mode currents
+                    {
+                        if(status.out[i].blinkOff / status.out[i].blinkOn == 4){
+                            localCur.hex = localCur.hex / 4;
+                        }else{
+                            localCur.hex = localCur.hex / 2;
+                        }
+                    }
+                    
+                    
+                    if(localCur.dec > 0.5)                  // filter out transient
+                    {
+                        avgF = 3;
+                    }
+                    else
+                    {
+                        avgF = 50;
+                    }
+                }
+                else
+                {
+                    avgF = 3;
+                }
+                
+            }
+            
+            avgCurrentsDec[i] = approxRollingAverage(avgCurrentsDec[i], localCur.dec, avgF);
+            avgCurrentsHex[i] = approxRollingAverage(avgCurrentsHex[i], localCur.hex, avgF);
+            status.out[i].current.dec = avgCurrentsDec[i];
+            status.out[i].current.hex = avgCurrentsHex[i];
+            
+            if(status.pro.isEnabled)
+            {
+                if(localCur.dec <= 80.0)
+                {
+                    proShortTimer[i] = millis();
+                }
+                else if(millis() - proShortTimer[i] > 5000)
+                {
+                    myPrintf("PRO Fault/Short on SW%d: %f \n", i, fl(localCur.dec));
+                    
+                    status.out[i].outCmd = 0;
+                    status.out[i].blinkOff = 0;
+                    status.out[i].open = OUTPUT_SHORT;
+                
+                }
+                
+            }
+            else
+            {
+    //            if((approxRollingAverage(localCur.dec, avgCurrentsDec[i], 2) > 70) || 
+    //                ((status.out[i].blinkOff == 0 && status.out[i].outCmd >= 0xFE) && 
+    //                    ((offTimer[i] == 0) || (millis() - offTimer[i] > 1000)) &&
+    //                    (approxRollingAverage(avgCurrentsDec[i], localCur.dec, 3) > 40))){
+                if((approxRollingAverage(localCur.dec, avgCurrentsDec[i], 2) > 70) || 
+                    ((status.out[i].blinkOff == 0 && status.out[i].outCmd >= 0xFE) && 
+                        ((offTimer[i] == 0) || (millis() - offTimer[i] > 2000)) &&
+                        (approxRollingAverage(avgCurrentsDec[i], localCur.dec, 4) > 45))){
+                    
+                    myPrintf("Fault/Short on SW%d: %f \n", i, fl(localCur.dec));
+                    
+                    status.out[i].outCmd = 0;
+    //                status.out[i].output = 0;
+    //                status.out[i].blinkOn = 0xff;
+                    status.out[i].blinkOff = 0;
+                    status.out[i].open = OUTPUT_SHORT;
+                    
+                    offTimer[i] = 0;
+                    
+                    status.out[i].shortDelay = millis();
+
+                }
+                else if((status.out[i].shortDelay != 0) && (millis() - status.out[i].shortDelay > 3500))
+                {
+                    status.out[i].shortDelay = 0;
+                }
+            }
+            
+            
+            
+            if(status.out[i].current.dec < 0.05) // Check open/short conditions
+            {          
+                status.out[i].current.hex = 0;
+                status.out[i].current.dec = 0;
+                
+                if(status.out[i].outCmd) 
+                {
+                    if(!status.out[i].shortDelay)
+                    status.out[i].open = OUTPUT_OPEN;      // no current & powered
+                } 
+                else 
+                {
+                    if(!status.out[i].shortDelay)
+                    status.out[i].open = OUTPUT_OFF;     // not powered
+                }
+            } 
+            else if(status.out[i].outCmd) 
+            {
+                if(status.out[i].blinkOff != 0 && status.out[i].blinkOn != 0)// check if strobe or flash
+                {
+                    if(!status.out[i].shortDelay)
+                    status.out[i].open = OUTPUT_FLASH;
+                }
+                else
+                {
+                    if(status.out[i].current.dec > 35.0 && status.out[i].outCmd > 200) // short
+                    {
+//                        status.out[i].open = OUTPUT_SHORT;         // over current
+                        
+                        myPrintf("Over current on SW%d \n", i);
+                        
+//                        status.out[i].outCmd = 0;
+////                        status.out[i].output = 0;
+////                        status.out[i].blinkOn = 0;
+//                        status.out[i].blinkOff = 0;
+                    }
+                    else // nominal
+                    {
+                      if(!status.out[i].shortDelay)
+                      status.out[i].open = OUTPUT_NOM;           // nominal operation  
+                    }
+                }
+            } 
+            else // fault
+            {
+                if(!status.out[i].shortDelay)
+                status.out[i].open = OUTPUT_FAULT;
+                
+                faults++;
+                
+//                myPrintf("Fault on SW%d \n", i);
+                
+//                status.out[i].outCmd = 0;
+////                status.out[i].output = 0;
+////                status.out[i].blinkOn = 0;
+//                status.out[i].blinkOff = 0;
+                
+                //fault_handler(i);  //i, status.out[i].current.hex))
+
+                
+                
+            }  
+        }
+        
+        
+        if(faults > 2){
+            adc_c_calibrate();
+            faults = 0;
+        }
+        
+    }
+    PT_END(&s->pt);
+}
+
+bool ignFlag0 = 0;
+bool ignFlag1 = 0;
+
+void updateOutput(uint8_t i)
+{
+    if((status.out[i].blinkOff != 0) && (status.out[i].blinkOn != 0))   // if any blink mode
+    {
+//        if((millis() - status.out[i].timer) <= (status.out[i].blinkOn))
+//        {
+//            status.out[i].output = status.out[i].outCmd;
+//        }
+//        else if((millis() - status.out[i].timer) <= (status.out[i].blinkOn + status.out[i].blinkOff))
+//        {
+//            status.out[i].output = 0x00;
+//        }
+//        else
+//        {
+//            status.out[i].timer = millis();
+//        }
+    }
+    else
+    {
+        status.out[i].output = status.out[i].outCmd;
+    }   
+}
+
+PT_THREAD(updateOutputs(struct state *s))
+{
+    static uint8 i;
+//    static uint16 out;
+//    static int32 onTimers[8];
+    static uint16 lastOutputs[8];
+    
+
+    PT_BEGIN(&s->pt);
+    while(1)
+    {         
+        
+        timer_set(&s->timer, 4);
+        PT_WAIT_UNTIL(&s->pt, timer_expired(&s->timer));
+        
+<<<<<<< HEAD
+//        if((overheated || overheated2) && status.debug)
+//        {   
+//            if((millis() % 500) < 250)
+//            {
+//                if(PS_LEDS_Read() == 0)
+//                {
+//                    myPrintf("Overheated... \n");
+//                }
+//                
+//                PS_LEDS_Write(1);
+//            }
+//            else
+//            {
+//                PS_LEDS_Write(0);
+//            }
+//        }
+//        else
+//        {
+            PS_LEDS_Write(status.leds);
+//        }
+=======
+//            PS_LEDS_Write(status.leds);
+
+>>>>>>> SB-35-implement-ota-updating-in-app
+       
+        for(i = 0; i < 8 ; i++)
+        {
+            
+        
+            if(overheated)
+            {
+                
+                if(!overheated2)
+                {
+                    myPrintf("Overheated... \n");
+                    overheated2 = 1;
+                }
+                
+                status.out[i].outCmd = 0;
+                status.out[i].output = 0;
+                status.out[i].blinkOn = 0xff;
+                status.out[i].blinkOff = 0;
+                
+            }
+            else
+            {
+                if(i == 0)  // check ign ctrl for sw0
+                {
+                    if(status.ignCh0){
+                        if(status.ignSense)
+                        {
+                            updateOutput(i); 
+                            ignFlag0 = 0;
+                        }else
+                        {
+                            status.out[i].output = 0; 
+                            ignFlag0 = 1;
+                        }
+                    }else{
+                        updateOutput(i); 
+                        ignFlag0 = 0;
+                    }
+                }else if( i == 1)   // check ign ctrl for sw1
+                {
+                    if(status.ignCh1){
+                        if(status.ignSense)
+                        {
+                            updateOutput(i); 
+                            ignFlag1 = 0;
+                        }else
+                        {
+                            status.out[i].output = 0; 
+                            ignFlag1 = 1;
+                        }
+                    }else{
+                        updateOutput(i); 
+                        ignFlag1 = 0;
+                    }
+                }
+                else
+                {
+                 updateOutput(i);   
+                }
+            }
+            
+            
+            
+            
+            
+
+//            status.out[i].outCmd = status.out[i].output;
+
+//            if(lastOutputs[i] != status.out[i].output && lastOutputs[i] == 0)
+//            {
+//                onTimers[i] = millis();
+//            }
+//            else if(status.out[i].output > 0){
+//                
+//                status.out[i].onTime = millis() - onTimers[i];
+//            }else
+//            {
+//                status.out[i].onTime = 0;
+//            }
+//            
+//            lastOutputs[i] = status.out[i].output;
+//            
+            
+            
+            if(status.out[i].blinkOff == 0)
+            {
+                c_pwm(i, status.out[i].output);
+                
+                if((lastOutputs[i] != status.out[i].output) && (status.out[i].output == 0))
+                {
+                    
+                    if(status.out[i].open != OUTPUT_SHORT)
+                    {
+                        offTimer[i] = millis() - 1;
+                    }
+                }
+                else if(millis() - offTimer[i] > 10000)
+                {
+                    offTimer[i] = 0;
+                }
+                
+                lastOutputs[i] = status.out[i].output;
+            }
+            
+            if(status.pro.isEnabled && status.pro.timers[i] > 0)
+            {
+                if(status.out[i].outCmd > 0 && status.pro.curTime[i] == 0)
+                {
+                    status.pro.curTime[i] = millis();
+                }
+                else if(status.out[i].outCmd == 0 && status.pro.curTime[i] != 0)
+                {
+                    status.pro.curTime[i] = 0;
+                }
+                else if(status.pro.curTime[i] != 0 && (millis() - status.pro.curTime[i] > (status.pro.timers[i] * 60 * 1000)))
+                {
+                    status.out[i].outCmd = 0; 
+                    status.pro.curTime[i] = 0;
+                }
+            }
+            
+            timer_set(&s->timer, 1);
+            PT_WAIT_UNTIL(&s->pt, timer_expired(&s->timer));
+            
+            uint32_t time = millis();
+            uint32_t time2;
+//            int j = 0;
+//            
+//            if(0)
+            for(uint8_t j = 0 ; j < 8 ; j++)    // handle blinking quickly
+            {
+                if((status.out[j].blinkOff != 0) && (status.out[j].blinkOn != 0))
+                {
+//                    if(status.out[j].outCmd == 0)
+//                    {
+//                    }
+                    
+                    time2 = time;
+                    
+                    time2 = time2 % (status.out[j].blinkOff + status.out[j].blinkOn);
+                    
+                    if(time2 > status.out[j].blinkOn)
+                    {
+                        status.out[j].output = 0;
+                    }
+                    else
+                    {
+                        status.out[j].output = status.out[j].outCmd;
+                    }
+                    
+                    if(ignFlag0 && (j == 0))
+                    {
+                        status.out[j].output = 0;
+                    }
+                    
+                    if(ignFlag1 && (j == 1))
+                    {
+                        status.out[j].output = 0;
+                    }
+                    
+                    if(status.out[j].output != lastOutputs[j])
+                    {
+                        lastOutputs[j] = status.out[j].output;
+                        c_pwm(j, status.out[j].output);
+                    }
+                    
+                }
+                
+                CyDelayUs(50);
+                
+            }
+            
+            
+//            myPrintf("\n");
+        }
+        
+
+    }
+    PT_END(&s->pt);
+}
+
+
+void enterBootloader(void)
+{
+    myPrintf("Enter Bootloader Mode \n");
+    
+    outputs_off();
+    
+    Bootloadable_SetActiveApplication(0);
+    Bootloadable_Load();
+    CySoftwareReset();
+    
+}
+
+static uint8_t currSwitchValue[32] = {0};
+static uint8_t currBlinkOn[32] = {0};
+static uint8_t currBlinkOff[32] = {0};
+
+static uint8_t currCurrentHigh[32] = {0};
+static uint8_t currCurrentLow[32] = {0};
+static uint8_t currStatusValue[32] = {0};
+
+
+static uint8_t currTemp[4] = {0};
+//static uint8_t lastTemp[4] = {0};
+static uint8_t currBatt[4] = {0};
+//static uint8_t lastBatt[4] = {0};
+static bool currBatt12_24[4] = {0};
+
+
+
+
+bool sendOtaPacket = false;
+bool sendProPacket = false;
+bool authGood = false;
+bool misInt = false;
+bool misErr = false;
+
+uint8 misErr = 0;
+bool misInt = false;
+
+PT_THREAD(canListen(struct state *s))
+{
+    static uint8 i;
+//    static uint8 bytesRead = 0;
+    static uint8 index = 0;
+    
+    static uint32_t lastRec = 0;
+    
+<<<<<<< HEAD
+=======
+    static int canResCnt = 0;
+    static uint32 debTime = 0;
+    static uint32 flshTime = 0;
+    
+    static uint8 isShowErr = 0;
+    static bool ledsOn = 0;
+    static uint32 ledTime = 0;
+    static uint32 ledTimeE = 0;
+    
+    static uint32 awakeLedTime = 0;
+    
+    static uint32 lastAlivePacket = 0;
+    
+>>>>>>> SB-35-implement-ota-updating-in-app
+    PT_BEGIN(&s->pt);
+    while(1)
+    {     
+        currState = 'L';
+
+        timer_set(&s->timer, 1); 
+        PT_WAIT_UNTIL(&s->pt, timer_expired(&s->timer));
+        
+//        myPrintf("L");
+        
+//        PT_WAIT_UNTIL(&s->pt, CANINT_Read() == 0);           
+        
+//        uint8 canStatus = mcpCanReadMsgBuf(&can, &bytesRead, rx_buffer);
+        
+        
+        if(canBufRead != canBufLoad)    // if packet received
+        {
+<<<<<<< HEAD
+            currState = 'M';
+            lastRec = millis();
+=======
+            lastRec = millis();
+            
+            isr_canint_Disable();
+>>>>>>> SB-35-implement-ota-updating-in-app
+            
+            for(uint8_t j = 0 ; j < 5 ; j++)
+            {
+                rx_buffer[j] = can_buf[canBufRead].rx_buf[j];
+                can_buf[canBufRead].rx_buf[j] = 0;
+            }
+            
+            canBufRead++;
+            canBufRead = canBufRead % 16;
+            
+            isr_canint_Enable();
+//        }
+//        
+//        if(canStatus == CAN_OK)
+//        {
+            currState = 'N';
+
+            
+            if(rx_buffer[0] == (DEBUG_PACKET | status.address)){
+                
+                if(rx_buffer[1] == 0x7E)
+                {
+                    lastAlivePacket = millis();
+                    aliveTimer = millis();
+                    isAwake = 1;
+                    
+                    myPrintf("A\n");
+                    
+                    if(millis() > 10000)
+                    {
+                        PS_LEDS_Write(!PS_LEDS_Read());
+                        awakeLedTime = millis();
+                    }
+                   // myPrintf("alive packet\n");
+                    // > addressed alive packet: reset timout timer    
+                }
+            }
+            
+            
+            if((rx_buffer[0] & 0xF0) == SYSTEM_PACKET){
+                
+                srcConnTimer[rx_buffer[4] & 0x0F] = millis();
+                
+                if(sourceConnected[rx_buffer[4] & 0x0F] < 2)
+                {
+                    sourceConnected[rx_buffer[4] & 0x0F] = 1;
+                }
+                
+                currBatt[rx_buffer[4] & 0x0F] = rx_buffer[1];
+                currTemp[rx_buffer[4] & 0x0F] = rx_buffer[2];
+                currBatt12_24[rx_buffer[4] & 0x0F] = rx_buffer[4] & 0x80 >> 7;
+            }
+            
+            
+            if((rx_buffer[0] & 0xF0) == SWITCH_PACKET){
+                
+//                myPrintf("%x %x %x %x %x ", rx_buffer[0], rx_buffer[1], rx_buffer[2], rx_buffer[3], rx_buffer[4]);
+//                
+//                write_millis();
+                
+                
+                if(rx_buffer[0] == (SWITCH_PACKET | status.address)){
+                
+                    aliveTimer = millis();
+                    isAwake = 1;
+                    
+                    i = canToI(rx_buffer[1]);
+                    
+                    if(status.out[i].shortDelay == 0)
+                    {
+                        if(rx_buffer[2] == 0xFE){           // correct for legacy values
+                            status.out[i].outCmd = 0xFF;
+                        }else{
+                            status.out[i].outCmd = rx_buffer[2]; 
+                        }
+                        
+                        if(status.pro.isEnabled && status.out[i].outCmd != 0)
+                        {
+//                            status.out[i].outCmd = status.pro.alwaysOn[i] ? status.pro.lastSwVal[i] : 0x00;
+                            status.pro.lastSwVal[i] = status.out[i].outCmd;
+                        }
+                        status.out[i].blinkOn = rx_buffer[3] * FLASH_SPEED; 
+                        status.out[i].blinkOff = rx_buffer[4] * FLASH_SPEED;
+                    }
+                    
+                    
+                }
+                else
+                {
+                    index = canToI(rx_buffer[1]) + 8 * (rx_buffer[0] & 0x0F);
+                    
+                    currSwitchValue[index] = rx_buffer[2];
+                    currBlinkOn[index] = rx_buffer[3];
+                    currBlinkOff[index] = rx_buffer[4];
+                    
+                }
+                
+            }
+            
+            if((rx_buffer[0] & 0xF0) == STATUS_PACKET){
+            
+                sourceConnected[rx_buffer[0] & 0x0F] = 2;
+                
+                index = canToI(rx_buffer[1]) + 8 * (rx_buffer[0] & 0x0F);
+                    
+                currStatusValue[index] = rx_buffer[2];
+                currCurrentHigh[index] = rx_buffer[3];
+                currCurrentLow[index] = rx_buffer[4];
+            
+            
+            }
+            
+            
+            currState = 'O';
+        }
+<<<<<<< HEAD
+//        else if(lastRec != 0 && (millis() - lastRec) > 1000)
+//        {
+//            currState = 'Q';
+//            lastRec = millis();
+//            
+//            if(CANINT_Read() == 0)  // packet rec interrupt missed
+//            {
+////                mcpCanReadMsgBuf(&can, &bytesRead, rx_buffer);
+//                
+//                misInt = true;
+//            }
+//            
+//            if(mcpCanCheckError() != CAN_OK)    // CAN error needs clear
+//            {
+////                mcpCanClearError();  
+//                
+//                misErr = true;
+//            }     
+//            
+//            if(misInt)  // debug
+//            {
+//                myPrintf("i");
+//            }
+//            
+//            if(misErr)  // debug
+//            {
+//                myPrintf("e");
+//            }
+//            currState = 'R';
+//        }
+=======
+        else if(millis() > 30000 && lastRec != 0 && (millis() - lastRec) > 100)
+        {
+            lastRec = millis();
+            
+            if(CANINT_Read() == 0)  // packet rec interrupt missed
+            {
+                mcpCanReadMsgBuf(&can, &bytesRead, rx_buffer);
+                
+                misInt = true;
+                
+                myPrintf("_");
+            }
+            
+            isr_canint_Disable();
+            
+            uint8 isCanErr = mcpCanCheckError();
+            
+            if(isCanErr != CAN_OK)    // CAN error needs clear
+            {
+                
+                
+                canErr.canErrCnt++;
+                canErr.canErrMore++;
+                
+                mcpCanClearError();  
+                
+                misErr = 1;
+                
+//                myPrintf("e");
+                
+                CyDelay(5);
+                
+                isCanErr = mcpCanCheckError();
+                
+                if(isCanErr != CAN_OK)    // CAN error needs clear
+                {
+//                    PS_LEDS_Write(1);
+                    
+                    canErr.canErrMore--;
+                  
+                    uint16 tryCnt = canErr.canRstTryCnt;
+    
+                    canErr.canRstTryCnt--;
+                    
+                    do{
+                        
+                        CyDelay(5);
+                        canErr.canRstCnt++;
+                        canErr.canRstTryCnt++;
+                        
+                    }while(configureCan2() != 0);
+                    
+                    if(canErr.canRstTryCnt > tryCnt)
+                    {
+                        canErr.canRstMore++;
+                        
+                        isShowErr = 255;
+//                        PS_LEDS_Write(1);
+                    }
+
+                    
+                    canResCnt++;
+//                    myPrintf("e%d", canResCnt);
+                }
+                
+//                if((millis() - flshTime) > 60000)  
+//                {
+//                    flshTime = millis();
+                    writeFlash();
+//                }
+            }     
+            else if((millis() - lastAlivePacket) > 10000)
+            {
+                lastAlivePacket = millis();
+                
+                do{
+                        
+                    CyDelay(5);
+                    
+                }while(configureCan2() != 0);
+                
+                myPrintf("r");
+                
+            }
+            
+            isr_canint_Enable();
+            
+            if(misInt)  // debug
+            {
+                myPrintf("I");
+            }
+            
+        }
+
+        if(millis() > 5000 && millis() < 10000)
+        {
+            PS_LEDS_Write(1);
+        }
+        
+        if((millis() - debugOnTimer) < 30000)
+        {
+            if(millis() > 10000 && (millis() - ledTimeE) > 10)
+            {
+                ledTimeE = millis();
+                
+                if(awakeLedTime > 0)
+                {
+                    if((millis() - awakeLedTime) > 25)
+                    {
+                        PS_LEDS_Write(!PS_LEDS_Read());
+                        awakeLedTime = 0;
+                    }
+                }
+                else if((millis() - ledTime) > (isAwake ? 2500 : 5000))
+                {
+                    ledTime = millis();
+                    ledsOn = !ledsOn;
+                    PS_LEDS_Write(ledsOn);
+                }
+                
+    //            if(ledsOn && isShowErr)
+    //            {
+    //                PS_LEDS_Write(!PS_LEDS_Read());
+    //                isShowErr--;
+    //            }
+            }
+        }
+        else
+        {
+            PS_LEDS_Write(0);
+        }
+        
+        
+        
+        if(debTime == 0 || (millis() - debTime) > 7200000)
+        {
+            debTime = millis();
+            
+            myPrintf("pCycle:%d WDT:%d Err:%d(+%d) CanRst%d(+%d/%d) (%d)\n"
+                , canErr.rebootCnt - 1, canErr.wdtCnt, canErr.canErrCnt, canErr.canErrMore
+                , canErr.canRstCnt, canErr.canRstTryCnt, canErr.canRstMore, misErr);
+        
+            
+        }
+>>>>>>> SB-35-implement-ota-updating-in-app
+        
+//        if(mcpCanCheckError() != CAN_OK)
+//        {
+//            mcpCanClearError();   
+//        }    
+        currState = 'F';
+    }
+    PT_END(&s->pt);
+}
+
+PT_THREAD(canBroadcast(struct state *s))
+{
+    static uint8 k = 0;
+    static uint8 j = 0;
+//    static uint8 m = 0;
+//    static uint8 n = 0;
+    static uint8 b = 0;
+    
+    static CYBLE_API_RESULT_T                  bleApiResult;
+    static CYBLE_GATTS_HANDLE_VALUE_NTF_T      characteristicNotify;
+
+    static bool updateSystemPacket = 0;
+    static bool updateSwitchPacket = 0;
+    static bool updateStatusPacket = 0;
+    static bool updateDebugPacket = 0;
+    static bool sendPacket = 0;
+    static bool sendBlePacket = 0;
+//    static bool wasConnected = 0;
+    static bool onlyBle = 0;
+    
+    static bool ignToggle = 0;
+    
+    static uint8_t bleUpdateCount = 0;
+    static uint32_t bleUpdateTimer = 0;
+    
+    static bool bleUpdateBridge = 0;
+    static uint8_t bleBridgeBuffer[52][5] = {0};
+    static int currBufEl = -1;
+    
+//    static uint32 ignTimer = 0;
+    
+    
+    PT_BEGIN(&s->pt);
+    while(1)
+    {    
+        
+        timer_set(&s->timer, 25);     // for proper CAN timing
+        PT_WAIT_UNTIL(&s->pt, timer_expired(&s->timer));
+        
+//        myPrintf("B1");
+        //myPrintf("ping out\n");
+        
+        if(updateSystemPacket) 
+        {    // temp/voltage
+            tx_buffer[0] = SYSTEM_PACKET;
+            tx_buffer[1] = status.batVolt.hex;
+            tx_buffer[2] = status.temp.hex;     
+            tx_buffer[3] = 0x55;
+            tx_buffer[4] = status.address | (~is12v_not24 << 7);    // can error bit counter thing "d1"
+            
+            sendPacket = 1;
+            
+            
+            if(authGood)
+            {
+            
+                if(lastBatt[status.address] != status.batVolt.hex)
+                {
+                    int diff = (int)status.batVolt.hex - (int)lastBatt[status.address];
+                    
+                    if(diff > 3 || diff < -3)
+                    {
+                        lastBatt[status.address] = status.batVolt.hex;
+                        sendBlePacket = 1;
+                    }
+                }
+                
+                if(lastTemp[status.address] != status.temp.hex)
+                {
+                    int diff = (int)status.temp.hex - (int)lastTemp[status.address];
+                    
+                    if(diff > 2 || diff < -2)
+                    {
+                        lastTemp[status.address] = status.temp.hex;
+                        sendBlePacket = 1;
+                    }
+                }
+            }
+            else
+            {
+                lastBatt[status.address] = 0;
+                lastTemp[status.address] = 0;
+            }
+            
+            if(bleUpdateCount)
+            {
+                bleUpdateCount--;
+                sendBlePacket = 1;
+            }
+            
+            updateSystemPacket = 0;
+            
+//            myPrintf("SYSTEM PACKET \n");
+            
+        }
+        else if(updateDebugPacket)
+        {             // telling shields/periphrials that debug mode/leds are on
+            
+            tx_buffer[0] = (status.address | DEBUG_PACKET);
+            tx_buffer[1] = 0x0A;     
+            tx_buffer[2] = 0x00;
+            tx_buffer[3] = 0x00;
+            tx_buffer[4] = 0x00;
+            
+            if(status.leds){     
+                tx_buffer[2] = 0x0F;
+            }
+            
+            
+            sendPacket = 1;
+            sendBlePacket = 0;
+            updateDebugPacket = 0;
+            
+//            myPrintf("DEBUG PACKET \n");
+            
+        }
+        else if(updateSwitchPacket)
+        {
+            // update
+            tx_buffer[0] = (status.address | SWITCH_PACKET);
+            tx_buffer[1] = iToCan(j);     
+            tx_buffer[2] = status.out[j].outCmd;
+            tx_buffer[3] = status.out[j].blinkOn / FLASH_SPEED;
+            tx_buffer[4] = status.out[j].blinkOff / FLASH_SPEED;
+               //myPrintf("%d | %x | %x | %x | %x | %x\n", j, tx_buffer[0], tx_buffer[1], tx_buffer[2], tx_buffer[3], tx_buffer[4]);
+            
+//            if(millis() - ignTimer > 1500)
+            if(ignToggle)
+            {
+                if(j == 0 && status.ignCh0 && ignFlag0) // flash the button if the ignition is off for that channel (ignFlag handled in updateOutputs)
+                {
+                        tx_buffer[2] = 0;
+                }
+                
+                if(j == 1 && status.ignCh1 && ignFlag1) // flash the button if the ignition is off for that channel (ignFlag handled in updateOutputs)
+                {
+                        tx_buffer[2] = 0;
+                }
+            }
+            
+            if(lastSwitchValue[(status.address * 8) + j] != status.out[j].output)
+            {
+                lastSwitchValue[(status.address * 8) + j] = status.out[j].output;
+                sendBlePacket = 1;
+            } 
+            
+            if(bleUpdateCount)
+            {
+                bleUpdateCount--;
+                sendBlePacket = 1;
+            }
+            
+            j++;
+            
+            if (j > 7) {
+    		    j=0;
+
+                canState = OUTPUTS_2;
+
+                updateSwitchPacket = 0;
+                updateStatusPacket = 1;
+                
+//                if(millis() - ignTimer > 1500)
+//                {
+//                    ignTimer = millis();   
+                if(ignToggle){
+                    ignToggle = 0;
+                }else{
+                    ignToggle = 1;
+                }
+                
+//                myPrintf("SWITCH PACKETS \n");
+    		}
+            
+            sendPacket = 1;
+            
+        }
+        else if(updateStatusPacket)
+        {
+            
+            int netIndex = (status.address * 8) + k;
+            
+            //status
+            tx_buffer[0] = (status.address | STATUS_PACKET);
+            tx_buffer[1] = iToCan(k);                              // Pin mask
+            tx_buffer[2] = status.out[k].open;                  // mode pin is in (eg open, short, etc)
+            tx_buffer[3] = status.out[k].current.hex >> 8;      // first byte of current    
+            tx_buffer[4] = status.out[k].current.hex & 0x00FF;  // second byte of current, 
+                // current value right justified 11 bit e.g. between 0x0000 - 0x07FF
+            
+            
+            
+            if(lastOutputState[netIndex] != status.out[k].open)
+            {
+                lastOutputState[netIndex] = status.out[k].open;
+                sendBlePacket = 1;
+            }
+            
+            if(lastOutputValue[netIndex] != status.out[k].current.hex)
+            {
+                int diff = (int)status.out[k].current.hex - (int)lastOutputValue[netIndex];
+                
+                if(diff > 3 || diff < -3)
+                {
+                    lastOutputValue[netIndex] = status.out[k].current.hex;
+                    sendBlePacket = 1;
+                }
+            }
+            if(bleUpdateCount)
+            {
+                bleUpdateCount--;
+                sendBlePacket = 1;
+            }
+                
+            
+            
+            
+            k++;
+            
+//            myPrintf("%d\n", k);
+            
+            if (k > 7) 
+            {
+    		    k=0;
+                
+                updateStatusPacket = 0;
+//                myPrintf("STATUS PACKETS \n");
+    		}
+            
+            sendPacket = 1;
+            
+        }
+        else if(authGood)
+        {
+            if(bleUpdateBridge && (currBufEl == -1))
+            {
+                bleUpdateBridge = 0;
+                
+                
+                for(b = 0 ; b < 4 ; b++)
+                {
+                    if((b == status.address) || (sourceConnected[b] == 0))
+                        continue;
+                    
+                    currBufEl++;
+                    
+                    bleBridgeBuffer[currBufEl][0] = SYSTEM_PACKET; 
+                    bleBridgeBuffer[currBufEl][1] = currBatt[b]; 
+                    bleBridgeBuffer[currBufEl][2] = currTemp[b];
+                    bleBridgeBuffer[currBufEl][3] = 0x55;
+                    bleBridgeBuffer[currBufEl][4] = b | (currBatt12_24[b] << 7);
+                    
+                    
+                    for(int c = 0; c < 8 ; c++)
+                    {
+                        currBufEl++;
+                        
+                        bleBridgeBuffer[currBufEl][0] = SWITCH_PACKET | b; 
+                        bleBridgeBuffer[currBufEl][1] = iToCan(c);
+                        bleBridgeBuffer[currBufEl][2] = currSwitchValue[b * 8 + c];
+                        bleBridgeBuffer[currBufEl][3] = currBlinkOn[b * 8 + c];
+                        bleBridgeBuffer[currBufEl][4] = currBlinkOn[b * 8 + c];
+                        
+                    }
+                    
+                    if(sourceConnected[b] < 2)
+                        continue;
+                    
+                    for(int c = 0; c < 8 ; c++)
+                    {
+                        currBufEl++;
+                        
+                        bleBridgeBuffer[currBufEl][0] = STATUS_PACKET | b; 
+                        bleBridgeBuffer[currBufEl][1] = iToCan(c);
+                        bleBridgeBuffer[currBufEl][2] = currStatusValue[b * 8 + c];
+                        bleBridgeBuffer[currBufEl][3] = currCurrentHigh[b * 8 + c];
+                        bleBridgeBuffer[currBufEl][4] = currCurrentLow[b * 8 + c];
+                        
+                    }
+                }
+                
+            }
+            
+            if(currBufEl >= 0)
+            {
+                for(int b = 0; b < 5 ; b++)
+                {
+                    tx_buffer[b] = bleBridgeBuffer[currBufEl][b];
+                }
+                
+                sendPacket = 1;
+                onlyBle = 1;
+                sendBlePacket = 1;
+                
+                currBufEl--;
+            }
+            
+            
+//            
+//            while((m < 32) && (sendPacket == 0))
+//            {
+//                
+//                if((m/8 != (status.address)) && (currSwitchValue[m] != lastSwitchValue[m]))
+//                {
+//                    lastSwitchValue[m] = currSwitchValue[m];
+//                    
+//                    tx_buffer[0] = ( (m/8) | SWITCH_PACKET);
+//                    tx_buffer[1] = iToCan(m%8);     
+//                    tx_buffer[2] = currSwitchValue[m];
+//                    tx_buffer[3] = currBlinkOn[m];
+//                    tx_buffer[4] = currBlinkOff[m];
+//                    
+//                    sendPacket = 1;
+//                    onlyBle = 1;
+//                    sendBlePacket = 1;
+//                    
+////                    myPrintf(" %d | %x | %x | %x | %x | %x\n", m, tx_buffer[0], tx_buffer[1], tx_buffer[2], tx_buffer[3], tx_buffer[4]);
+//                }else if((m/8 != (status.address)) && (currSwitchValue[m] != lastSwitchValue[m]))
+//                {
+//                    
+//                }
+//                
+//                m++;
+//            }
+//            
+//            m = m % 32;
+//            
+//            
+//            while((n < 4) && (sendPacket == 0))
+//            {
+//                if(n != status.address)
+//                {
+//                    
+//                    
+//                    if(lastBatt[n] != currBatt[n])
+//                    {
+//                        int diff = (int)currBatt[n] - (int)lastBatt[n];
+//                        
+//                        if(diff > 3 || diff < -3)
+//                        {
+//                            lastBatt[n] = currBatt[n];
+//                            sendPacket = 1;
+//                        }
+//                    }
+//                    
+//                    if(lastTemp[n] != currTemp[n])
+//                    {
+//                        int diff = (int)currTemp[n] - (int)lastTemp[n];
+//                        
+//                        if(diff > 3 || diff < -3)
+//                        {
+//                            lastTemp[n] = currTemp[n];
+//                            sendPacket = 1;
+//                        }
+//                    }
+//                    
+//                    
+//                    if(sendPacket)
+//                    {
+//                        tx_buffer[0] = SYSTEM_PACKET;
+//                        tx_buffer[1] = currBatt[n];     
+//                        tx_buffer[2] = currTemp[n];
+//                        tx_buffer[3] = 0x55;
+//                        tx_buffer[4] = n | (currBatt12_24[n] << 7);
+//                        
+//                        sendPacket = 1;
+//                        onlyBle = 1;
+//                        sendBlePacket = 1;
+//                    }
+//                    
+//                }
+//                
+//                n++;
+//            }
+//            
+//            n = n % 4;
+            
+
+            
+        }
+        
+       
+        if(sendPacket)
+        {
+            if(onlyBle) {
+                onlyBle = 0;
+            } else {
+                
+                isr_canint_Disable();
+                
+                mcpCanSendMsgBuf(&can, 0x80, 0, 5, tx_buffer);
+                
+                if(mcpCanCheckError() != CAN_OK)
+                {
+                    mcpCanClearError();   
+                }
+
+                isr_canint_Enable();
+
+            }
+            
+            sendPacket = 0;
+            
+            if(sendBlePacket && CyBle_GetState() == CYBLE_STATE_CONNECTED)
+                    {
+                       
+                        //myPrintf("BLE Connected...\n");
+                  
+                        /* if stack is free, handle UART traffic */
+                        if(CyBle_GattGetBusStatus() != CYBLE_STACK_STATE_BUSY)
+                        {
+                            //myPrintf("BLE Stack Free...\n");
+                            sendBlePacket = 0;
+                            
+                            if(sendNotifications){
+                                
+                                //myPrintf("BLE Notification Enabled...\n");
+                                int txLength = 5;
+                                int i = 0;
+                                
+                                bleTxBuffer[0] = 0x55;
+                                bleTxBuffer[1] = txLength + 5;
+                                bleTxBuffer[2] = 0x00;
+                                
+                                for(i = 0 ; i < txLength; i++)
+                                {
+                                    bleTxBuffer[3 + i] = tx_buffer[i];
+                                }
+                                
+                                uint32 crc = crc32(0, bleTxBuffer, txLength + 3);
+                                
+                                uint32 packetLength = txLength + 7;
+                                
+                                bleTxBuffer[packetLength - 4] = crc & 0xFF;
+                                bleTxBuffer[packetLength - 3] = crc >> 8;
+                                bleTxBuffer[packetLength - 2] = crc >> 16;
+                                bleTxBuffer[packetLength - 1] = crc >> 24;
+                                
+                                
+                                characteristicNotify.value.val = bleTxBuffer;
+                                characteristicNotify.value.len = packetLength;
+                                characteristicNotify.attrHandle = CYBLE_SPOD_COMM_CHAR_HANDLE;
+                                
+                                do
+                                {
+                                    
+                                    bleApiResult = CyBle_GattsNotification(cyBle_connHandle, &characteristicNotify);
+                                    CyBle_ProcessEvents();
+                                }
+                                while((CYBLE_ERROR_OK != bleApiResult) && (CYBLE_STATE_CONNECTED == cyBle_state));
+                                
+                            }
+                        }
+                    }
+
+        }
+        else if(sendOtaPacket && CyBle_GetState() == CYBLE_STATE_CONNECTED)
+        {
+            sendOtaPacket = false;
+            
+            int packetLength = 18;
+            
+            uint32_t appBoard, stkBoard;
+            uint16_t svdAppId, svdAppVer, svdStkId, svdStkVer;
+            
+            
+            appBoard = CY_GET_REG32(Bootloadable_MD_BASE_ADDR(1) + Bootloadable_META_APP_CUST_ID_OFFSET);
+            stkBoard = CY_GET_REG32(Bootloadable_MD_BASE_ADDR(0) + Bootloadable_META_APP_CUST_ID_OFFSET);
+            
+            svdAppId = CY_GET_REG16(Bootloadable_MD_BASE_ADDR(1) + Bootloadable_META_APP_ID_OFFSET);
+            svdAppVer = CY_GET_REG16(Bootloadable_MD_BASE_ADDR(1) + Bootloadable_META_APP_VER_OFFSET);
+            svdStkId = CY_GET_REG16(Bootloadable_MD_BASE_ADDR(0) + Bootloadable_META_APP_ID_OFFSET);
+            svdStkVer = CY_GET_REG16(Bootloadable_MD_BASE_ADDR(0) + Bootloadable_META_APP_VER_OFFSET);
+            
+            
+            
+            bleTxBuffer[0] = packetLength;
+            bleTxBuffer[1] = 0x00;
+            
+            bleTxBuffer[2] = (appBoard >> 24) & 0xFF;
+            bleTxBuffer[3] = (appBoard >> 16) & 0xFF;
+            bleTxBuffer[4] = (appBoard >> 8) & 0xFF;
+            bleTxBuffer[5] = (appBoard >> 0) & 0xFF;
+            
+            bleTxBuffer[6] = (svdAppId >> 8) & 0xFF;
+            bleTxBuffer[7] = (svdAppId >> 0) & 0xFF;
+            
+            bleTxBuffer[8] = (svdAppVer >> 8) & 0xFF;
+            bleTxBuffer[9] = (svdAppVer >> 0) & 0xFF;
+            
+            bleTxBuffer[10] = (stkBoard >> 24) & 0xFF;
+            bleTxBuffer[11] = (stkBoard >> 16) & 0xFF;
+            bleTxBuffer[12] = (stkBoard >> 8) & 0xFF;
+            bleTxBuffer[13] = (stkBoard >> 0) & 0xFF;
+            
+            bleTxBuffer[14] = (svdStkId >> 8) & 0xFF;
+            bleTxBuffer[15] = (svdStkId >> 0) & 0xFF;
+            
+            bleTxBuffer[16] = (svdStkVer >> 8) & 0xFF;
+            bleTxBuffer[17] = (svdStkVer >> 0) & 0xFF;
+            
+            
+            characteristicNotify.value.val = bleTxBuffer;
+            characteristicNotify.value.len = packetLength;
+            characteristicNotify.attrHandle = CYBLE_SPOD_OTA_BOOTLOADER_CHAR_HANDLE;
+            
+            myPrintf("Send OTA Packet: ");
+            
+            do
+            {
+                
+                bleApiResult = CyBle_GattsNotification(cyBle_connHandle, &characteristicNotify);
+                CyBle_ProcessEvents();
+            }
+            while((CYBLE_ERROR_OK != bleApiResult) && (CYBLE_STATE_CONNECTED == cyBle_state));
+            
+            myPrintf("Success \n");
+        }
+        else if(sendProPacket && CyBle_GetState() == CYBLE_STATE_CONNECTED)
+        {
+            sendProPacket = false;
+            
+            int packetLength = 19;
+            uint16_t swVal;
+            uint8_t index;
+            
+            bleTxBuffer[0] = packetLength;
+            bleTxBuffer[1] = (0x01 << 1) | (DEVICE_TYPE << 6);
+            bleTxBuffer[2] = status.address;
+            
+            
+            for(int j = 3 ; j < 19 ; j += 2)
+            {
+                index = (j - 3) / 2;
+                
+                swVal = ((status.pro.alwaysOn[index] << 11) & 0x0800) | (status.pro.timers[index] & 0x07FF);
+                
+                if(status.pro.curTime[index] != 0) // percentage of timer complete
+                {
+                    swVal |= (((millis() - status.pro.curTime[index]) * 0xF / 1000 / 60 / status.pro.timers[index]) & 0x0F) << 12;
+                }
+                
+                bleTxBuffer[j] = swVal >> 8;
+                bleTxBuffer[j + 1] = swVal & 0xFF;
+                
+            }
+            
+            
+            characteristicNotify.value.val = bleTxBuffer;
+            characteristicNotify.value.len = packetLength;
+            characteristicNotify.attrHandle = CYBLE_SPOD_PRO_MODE_CHAR_HANDLE;
+            
+            myPrintf("Send Pro Packet: ");
+            
+            do
+            {
+                bleApiResult = CyBle_GattsNotification(cyBle_connHandle, &characteristicNotify);
+                CyBle_ProcessEvents();
+            }
+            while((CYBLE_ERROR_OK != bleApiResult) && (CYBLE_STATE_CONNECTED == cyBle_state));
+            
+            myPrintf("Success \n");
+        }
+        
+        isr_canint_Disable();
+        
+        if(mcpCanCheckError() != CAN_OK)
+        {
+            mcpCanClearError();   
+        }
+        
+        isr_canint_Enable();
+        
+        if((millis() - systemTimer) > 535)
+        {
+            systemTimer = millis();
+            updateSystemPacket = 1;
+        }
+        
+        if((millis() - debugTimer) > 600)
+        {
+            debugTimer = millis();
+            updateDebugPacket = 1;
+        }
+        
+        if((millis() - switchTimer) > 750)
+        {
+            switchTimer = millis();
+            updateSwitchPacket = 1;
+        }
+        
+        if((millis() - bleUpdateTimer) > 2000)
+        {
+            bleUpdateTimer = millis();
+            bleUpdateCount = 17;
+            bleUpdateBridge = 1;
+        }
+        
+        
+        for(int s = 0 ; s < 4 ; s++)
+        {
+            if((sourceConnected[s] > 0) && ((millis() - srcConnTimer[s]) > 30000)){
+                sourceConnected[s] = 0;
+            }
+        }
+        
+    }
+    PT_END(&s->pt);
+}
+
+#define LV_TIMEOUT      120000  // 2min
+#define ALIVE_TIMEOUT   3000  // 1.5s
+
+uint32 bleAliveTimer = 0;
+
+PT_THREAD(sleep(struct state *s))
+{
+<<<<<<< HEAD
+    static uint32 lvTimer = 0;
+=======
+    static uint32 lvTimer;
+    static bool didSendLvMessage = false;
+    
+    static float lastBatVolt = 0.0;
+    static uint32 lastIgnCheck = 0;
+>>>>>>> SB-35-implement-ota-updating-in-app
+    
+    
+    PT_BEGIN(&s->pt);
+    while(1)
+    {        
+        timer_set(&s->timer, 100);
+        PT_WAIT_UNTIL(&s->pt, timer_expired(&s->timer));
+        
+        if(is12v_not24)
+        {
+            if(status.batVolt.dec > 11.6)
+            {
+                lvTimer = millis();
+            }
+        }
+        else
+        {
+            if(status.batVolt.dec > 23.2)
+            {
+                lvTimer = millis();
+            }
+        }
+        
+        if(millis() > 10000 && (millis() - lastIgnCheck) > 5000)
+        {
+            lastIgnCheck = millis();
+            
+            adcVals batV = vbat_read();
+            
+            if(lastBatVolt < 1.0)
+            {
+                lastBatVolt = batV.dec;
+            }
+            else
+            {
+                if((batV.dec - lastBatVolt) > 1.0)
+                {
+//                    CySoftwareReset();
+                    
+                    isr_canint_Disable();
+                    
+                    do{
+                        
+                        CyDelay(5);
+                        
+                    }while(configureCan2() != 0);
+                    
+                
+                    isr_canint_Enable();
+                    
+                }
+                
+                lastBatVolt = batV.dec;
+            }
+        }
+        
+        if((millis() - lvTimer) > LV_TIMEOUT)// && !status.debug)
+        {
+            if(!didSendLvMessage)
+            {
+                myPrintf("Low voltage timeout: \n ");
+                myPrintf("TURN OFF: ");
+                write_millis();
+                
+                didSendLvMessage = true;
+            }
+            
+            BYPASS_CTRL_Write(0); 
+        // if alternate lv_bypass isn't enabled, this will completely power down the unit and all periphrials
+        }
+        
+<<<<<<< HEAD
+        if((!isAwake || (millis() - aliveTimer) > ALIVE_TIMEOUT) && !status.debug && !(status.pro.isEnabled && status.pro.isDisableSleep))
+=======
+        if(millis() > 10000 && 
+            (!isAwake || 
+                ((millis() - aliveTimer) > ALIVE_TIMEOUT &&
+                (millis() - bleAliveTimer) > 30000)) && 
+            !status.debug)
+>>>>>>> SB-35-implement-ota-updating-in-app
+        {
+            if(!wasAsleep)     // sleep "initialize"
+            {
+                myPrintf("SLEEP ");// %d\n", millis());
+                write_millis();
+                
+                outputs_off();                      // disable outputs and pwm IC
+                outputs_sleep();
+                
+//                PS_LEDS_Write(0);
+                
+                for(int i = 0; i < 8; i++)
+                {
+                    status.out[i].outCmd = 0;
+                }
+                
+            }
+            
+        
+<<<<<<< HEAD
+=======
+        
+>>>>>>> SB-35-implement-ota-updating-in-app
+            isAwake = 0;
+            wasAsleep = 1;            
+            
+            timer_set(&s->timer, 1000);
+            PT_WAIT_UNTIL(&s->pt, timer_expired(&s->timer)); 
+            
+            status.batVolt = vbat_read();
+            
+//            myPrintf(" B:%f ", fl(status.batVolt.dec));
+            
+//            myPrintf("batvolt %f \n", fl(status.batVolt.dec));
+        }
+                        
+        if(isAwake && wasAsleep)        // awake "initialize
+        {
+            myPrintf("AWAKEN ");// %d\n", millis());
+            write_millis();
+            
+            outputs_wake();                     // renable pwm IC
+            
+            wasAsleep = 0;
+<<<<<<< HEAD
+            
+            if(status.pro.isEnabled)
+            {
+                for(int i = 0 ; i < 8 ; i++)
+                {
+                    status.out[i].outCmd = status.pro.alwaysOn[i] ? status.pro.lastSwVal[i] : 0x00;
+                }
+            }
+=======
+            aliveTimer = millis();
+>>>>>>> SB-35-implement-ota-updating-in-app
+        }
+    }
+    PT_END(&s->pt);
+}
+
+//#define DEBUG_ON_TIME   30000      // 30 s
+#define DEBUG_ON_TIME   600000      // 10 min
+
+PT_THREAD(debug(struct state *s))
+{
+    static uint8 i;
+    static bool tog = 0;
+    
+    PT_BEGIN(&s->pt);
+    while(1)
+    {           
+        timer_set(&s->timer, 1000);//2500);
+        PT_WAIT_UNTIL(&s->pt, timer_expired(&s->timer));
+
+        status.debug = (uint16_t)read_inputs(0) & DEBUG_MASK;
+        
+        if(status.debug)
+        {
+            aliveTimer = millis();
+            isAwake = 1;
+        }
+        
+//        myPrintf("\n");
+//        write_millis();
+        
+        status.leds = 0;
+//        status.leds = tog;
+//        status.out[7].outCmd = tog * 0xFF;
+//        
+//        tog = !tog;
+        
+        if(status.debug && (millis() - debugOnTimer) < DEBUG_ON_TIME)
+        {
+                status.leds = status.debug;
+//            printStatus();
+
+                
+                myPrintf("Source status: ");
+                write_millis();
+                
+                timer_set(&s->timer, 10);//2500);
+                    PT_WAIT_UNTIL(&s->pt, timer_expired(&s->timer));
+                
+                myPrintf("Switches:\n");
+                myPrintf("   Debug  |  ignCh0  |  ignCh1  |  Address  \n");
+                myPrintf("     %d          %d          %d         %x   \n", 
+                    status.debug, status.ignCh0, status.ignCh1, status.address);
+                myPrintf("Outputs: \n");
+                myPrintf("  Channel  |  Output  |  Current  |  Select  |  Mode\n");
+                myPrintf("--------------------------------------------------------\n");
+                
+                for(i=0 ; i<8 ; i++)
+                {
+                    timer_set(&s->timer, 10);//2500);
+                    PT_WAIT_UNTIL(&s->pt, timer_expired(&s->timer));
+                    
+                    myPrintf("     %d     |     %d        %fA        %d        ", (i+1), 
+                        (status.out[i].output * 100 / 0xFF), fl(status.out[i].current.dec),  status.inputs[i]);
+                    
+                    switch(status.out[i].open) 
+                    {
+                        case OUTPUT_OPEN:
+                            myPrintf("open \n");
+                        break;
+                        case OUTPUT_OFF:
+                            myPrintf("off\n");
+                        break;            
+                        case OUTPUT_SHORT:
+                            myPrintf("short \n");
+                        break;            
+                        case OUTPUT_NOM:
+                            myPrintf("nominal \n");
+                        break;            
+                        case OUTPUT_FAULT:
+                            myPrintf("fault \n");
+                        break;
+                        case OUTPUT_FLASH:
+                            myPrintf("flash \n");
+                        break;
+                        case OUTPUT_STROBE:
+                            myPrintf("strobe \n");
+                        break;
+                        default:
+                            myPrintf("error \n");
+                    }
+                }
+                
+                timer_set(&s->timer, 10);//2500);
+                    PT_WAIT_UNTIL(&s->pt, timer_expired(&s->timer));
+                
+                myPrintf("Other:\n");    
+                myPrintf("  ignition  |  BatVoltage  |  lvBypass  |  LEDs  |    Temp\n");
+                myPrintf("     %d        (%d)%fV           %d          %d       (%d) %fC   \n", 
+                    status.ignSense, is12v_not24, fl(status.batVolt.dec), status.lvBypass, status.leds, status.tempEdge, fl(status.temp.dec));
+                myPrintf("\n");
+        }
+
+        
+    }
+    PT_END(&s->pt);
+}
+
+
+void updateAuth(void);
+
+static struct state readInputsState, updateOutputsState, canListenState, canBroadcastState, debugState, sleepState;//, pairDeviceState;
+
+
+int main()
+{
+#if !defined(__ARMCC_VERSION)
+    InitializeBootloaderSRAM();
+#endif
+
+    // Checks if Self Project Image is updated and Runs for the First time 
+    AfterImageUpdate();
+    
+    
+    uint8_t resetCause;
+    
+    resetCause = CySysGetResetReason(CY_SYS_RESET_WDT | CY_SYS_RESET_SW | CY_SYS_RESET_PROTFAULT);
+    
+    if(resetCause != 0)
+    {
+    
+        if(resetCause == CY_SYS_RESET_WDT)
+        {
+            myPrintf("\nReset by watchdog \n\n");
+
+    //        while(1);
+        } else if(resetCause == CY_SYS_RESET_SW)
+        {
+            myPrintf("\nReset: CY_SYS_RESET_SW \n\n");
+
+    //        while(1);
+        } else if(resetCause == CY_SYS_RESET_PROTFAULT)
+        {
+            myPrintf("\nReset: CY_SYS_RESET_PROTFAULT \n\n");
+
+    //        while(1);
+        }
+    
+        PS_LEDS_Write(1);
+    }else{
+        PS_LEDS_Write(0);
+    }
+    
+    
+    PT_INIT(&readInputsState.pt);    
+    readInputsState.name = "readInputs\n";
+    
+    PT_INIT(&updateOutputsState.pt);    
+    updateOutputsState.name = "updateOutputs\n";
+    
+    PT_INIT(&canListenState.pt);    
+    canListenState.name = "canListen\n";
+        
+    PT_INIT(&canBroadcastState.pt);    
+    canBroadcastState.name = "canBroadcast\n";
+    
+    PT_INIT(&debugState.pt);    
+    debugState.name = "debug\n";
+        
+    PT_INIT(&sleepState.pt);    
+    sleepState.name = "sleep\n";
+    
+//    PT_INIT(&pairDeviceState.pt);    
+//    pairDeviceState.name = "pairDevice\n";
+     
+    PS_LEDS_Write(0);
+    BYPASS_CTRL_Write(1);
+
+    I2C_Start(); 
+    SPI_Start();
+    UART_Start();
+    ADC_Start();
+    ADC_SetChanMask(0b00000111);        // channel 0 - 2
+    ADC_StartConvert();
+
+    
+    
+    myPrintf("\nStart...\n");
+    
+//    myPrintf("Size u32:%d, st:%d\n", sizeof(millis()), sizeof(sleepState.timer.start));
+    
+    uint16 appId, appVer, boardId;
+    uint32 board;//, icPN;
+    char boardRev;
+    
+    
+    
+    appId = CY_GET_REG16(Bootloadable_MD_BASE_ADDR(1) + Bootloadable_META_APP_ID_OFFSET);
+    appVer = CY_GET_REG16(Bootloadable_MD_BASE_ADDR(1) + Bootloadable_META_APP_VER_OFFSET);
+    board = CY_GET_REG32(Bootloadable_MD_BASE_ADDR(1) + Bootloadable_META_APP_CUST_ID_OFFSET);
+    
+    boardId = (board & 0xFFFF0000) >> 16;
+    boardRev = (board & 0x0000FFFF) + ('A' - 1);
+    
+    
+    myPrintf("Boot App Board ID: %drev%c\n", boardId, boardRev);
+    myPrintf("Boot App Version: %d.%d.%d\n", appVer / 0x100, appVer % 0x100 / 0x10 , appVer % 0x10);
+    myPrintf("Boot App ID: %x\n", appId);
+    
+    appId = CY_GET_REG16(Bootloadable_MD_BASE_ADDR(0) + Bootloadable_META_APP_ID_OFFSET);
+    appVer = CY_GET_REG16(Bootloadable_MD_BASE_ADDR(0) + Bootloadable_META_APP_VER_OFFSET);
+    board = CY_GET_REG32(Bootloadable_MD_BASE_ADDR(0) + Bootloadable_META_APP_CUST_ID_OFFSET);
+    
+    boardId = (board & 0xFFFF0000) >> 16;
+    boardRev = (board & 0x0000FFFF) + ('A' - 1);
+    
+    myPrintf("Boot Stack Board ID: %drev%c\n", boardId, boardRev);
+    myPrintf("Boot Stack Version: %d.%d.%d\n", appVer / 0x100, appVer % 0x100 / 0x10 , appVer % 0x10);
+    myPrintf("Boot Stack ID: %x\n", appId);
+    
+    
+    // Map systick ISR to the user defined ISR. SysTick_IRQn is already defined in core_cm0.h file 
+	CyIntSetSysVector((SysTick_IRQn + 16), USER_ISR);
+    
+    SysTick_Config(NUMBER_OF_TICKS);
+   
+    // initialize watchdog 
+    InitWatchdog(WDT_INTERVAL_1S);
+    
+    InitBrownout(CY_LVD_THRESHOLD_3_00_V);
+    
+
+    isr_canint_StartEx(CANRX_ISR);
+    
+    CyGlobalIntEnable; 
+    
+    
+    CyBle_Start( StackEventHandler );
+    
+    srand(ADC_GetResult16(TEMP_CHAN) + 1);
+    
+    readProFlash();
+    
+    if(readPasskey() == 0) {
+        generatePasskey();
+    }
+    
+<<<<<<< HEAD
+    while (CyBle_GetState() == CYBLE_STATE_INITIALIZING){
+ 	    CyBle_ProcessEvents();
+ 	}
+    
+    i2c_init();
+    
+    status.address = ((uint16_t)read_inputs(0) & ADD_MASK) >> 12;    // read address for use in CAN bus
+    configureCan();
+    
+    adc_c_calibrate();
+=======
+    canErr.rebootCnt++;
+    
+    writeFlash();
+    
+//    myPrintf("D3\n");
+    while (CyBle_GetState() == CYBLE_STATE_INITIALIZING)
+ 	{
+ 	    CyBle_ProcessEvents();
+ 	}
+    
+//    myPrintf("D4\n");
+    i2c_init(); 
+//    myPrintf("D5\n");
+    status.address = ((uint16_t)read_inputs(0) & ADD_MASK) >> 12;    // read address for use in CAN bus 
+        if(status.address == 1){
+            status.address = 2;
+        } else if(status.address == 2){
+            status.address = 1;
+        }
+        
+    configureCan(); 
+//    myPrintf("D6\n");
+    adc_c_calibrate();    
+//    myPrintf("D7\n");
+>>>>>>> SB-35-implement-ota-updating-in-app
+    
+//    status.debug = 1;     // enable for debugging
+    
+    /* Enable Systick timer with desired period/number of ticks */
+//	SysTick_Config(NUMBER_OF_TICKS);
+
+    CyDelay(10 + (5 * status.address));     // different delays for each source address to offset communications
+
+    myPrintf("Finish Config...\n");
+<<<<<<< HEAD
+  
+    
+    for(;;)
+    {
+        currState = 'w';
+=======
+    
+//    while(pairingNeeded)
+//    {
+//        PT_SCHEDULE(pairDevice(&pairDeviceState));
+//        CyBle_ProcessEvents();
+//    }
+    
+    
+////    passkeyTimer = 1;
+    
+    for(;;)
+    {
+>>>>>>> SB-35-implement-ota-updating-in-app
+        resetWatchdog();
+        currState = 'a';
+        updateAuth();
+        currState = 'b';
+        CyBle_ProcessEvents();
+        currState = 'l';
+        PT_SCHEDULE(canListen(&canListenState));
+        if(isAwake)
+        {
+            currState = 'i';
+            PT_SCHEDULE(readInputs(&readInputsState));
+            currState = 'l';
+            PT_SCHEDULE(canListen(&canListenState));
+            currState = 'o';
+            PT_SCHEDULE(updateOutputs(&updateOutputsState));
+            currState = 'l';
+            PT_SCHEDULE(canListen(&canListenState));
+            currState = 'c';
+            PT_SCHEDULE(canBroadcast(&canBroadcastState));
+            currState = 'l';
+            PT_SCHEDULE(canListen(&canListenState));
+        }
+
+        currState = 'd';
+        PT_SCHEDULE(debug(&debugState));
+        currState = 'l';
+        PT_SCHEDULE(canListen(&canListenState));
+        currState = 's';
+        PT_SCHEDULE(sleep(&sleepState));
+        
+    }
+}
+
+
+
+uint8 bleFoundDelimiter = 0;
+uint8 bleBufferAddress = 0;
+int blePacketLength = 0;
+
+bool bleDisconnect = true;
+
+//bool storeBond = false;
+
+void updateAuth(void)
+{
+//    write_millis();
+    
+    static bool passOn = 1;
+    static bool passOff = 1;
+    static CYBLE_API_RESULT_T apiResult = CYBLE_ERROR_OK;
+    
+    if(passkeyTimer)
+    {
+        if((millis() - passkeyTimer) > PASSKEY_TIMEOUT)
+        {
+            passkeyTimer = 0;
+        }
+        
+//    }
+//    if((millis() - passkeyTimer) < PASSKEY_TIMEOUT) {
+        if(passOn) {
+            writePassKey(passkey);
+            passOn = 0;
+            passOff = 1;
+            bleDisconnect = false;
+            
+        }
+    } else {
+        if(passOff){
+            writePassKey(0);
+            passOn = 1;
+            passOff = 0;
+            bleDisconnect = true;
+            
+            
+        }
+    }
+    
+    if(cyBle_pendingFlashWrite != 0u)
+    {
+        
+        // Store Bonding informtation to flash 
+        apiResult = CyBle_StoreBondingData(0u);
+        if ( apiResult == CYBLE_ERROR_OK)
+        {
+            myPrintf("Bonding data stored\r\n");
+        }
+        else
+        {
+            myPrintf ("Bonding data storing pending\r\n");
+        }
+    }
+    
+}
+
+void ProcessPacket(uint8 packetLength)
+{
+    
+   // int i;
+    uint32 calcCrc = crc32(0, bleRxBuffer, packetLength - 4);
+    
+    uint32 tempCrc = 0;
+    tempCrc = tempCrc | bleRxBuffer[packetLength - 1];
+    tempCrc = (tempCrc << 8) | bleRxBuffer[packetLength - 2];
+    tempCrc = (tempCrc << 8) | bleRxBuffer[packetLength - 3];
+    tempCrc = (tempCrc << 8) | bleRxBuffer[packetLength - 4];
+    
+    if(tempCrc == calcCrc)
+    {
+        //myPrintf("Packet Good...\n");
+        if(bleRxBuffer[2] == 0) //CAN PACKET
+        {
+            
+            static uint8_t canTxBuf[5];
+            
+//            uint16 pin = 0;
+////            int index, i = 0;
+////            uint8 t1,t2;
+//            pin = pin | bleRxBuffer[4];
+//            pin = (pin << 8) | bleRxBuffer[3];
+//            
+            
+            //myPrintf("Packet Good... %d\n", pin);
+            
+            if((bleRxBuffer[5] & 0x0F) == status.address)// && (settings->pin == 0 || pin == settings->pin))
+            {
+                    uint8 i = canToI(bleRxBuffer[6]);
+                    
+                    status.out[i].outCmd = bleRxBuffer[7];
+                    
+                    if(status.out[i].outCmd == 0xFE)
+                    {
+                        status.out[i].outCmd = 0xFF;
+                    }
+                    
+                    if(status.pro.isEnabled && status.out[i].outCmd != 0)
+                    {
+                        status.pro.lastSwVal[i] = status.out[i].outCmd;
+                    }
+                    
+                    status.out[i].blinkOn = bleRxBuffer[8] * FLASH_SPEED; 
+                    status.out[i].blinkOff = bleRxBuffer[9] * FLASH_SPEED;
+                    
+                    isAwake = 1;
+                    bleAliveTimer = millis();
+            }
+            else        // dump onto CAN
+            {
+                for( int i = 0 ; i < 5 ; i++)
+                {
+                    canTxBuf[i] = bleRxBuffer[5 + i];
+                }
+                
+                isr_canint_Disable();
+                
+                mcpCanSendMsgBuf(&can, 0x80, 0, 5, canTxBuf);
+                
+                if(mcpCanCheckError() != CAN_OK)
+                {
+                    mcpCanClearError();   
+                }
+                
+                isr_canint_Enable();
+            }
+        }
+        else if(bleRxBuffer[2] == 1) //LED PACKET
+        {
+        }
+        else if(bleRxBuffer[2] == 2) //SETTINGS PACKET
+        {
+        }
+        else if(bleRxBuffer[2] == 3) //LINK PACKET
+        {
+        }
+        else if(bleRxBuffer[2] == 4) //PAIR PACKET
+        {
+                        
+//            if(pairingNeeded)
+//            {
+//                uint16 blePin = bleRxBuffer[4];
+//                blePin = (blePin << 8) | bleRxBuffer[3];
+//                myPrintf("Pair Recieved... %d\n", blePin);
+//                
+//                if(blePin == tempPin)
+//                {
+//                    settings->pin = blePin; 
+//                   // saveSettings();
+//                    pairingNeeded = 0;
+//                }
+//            }            
+            
+        }
+        
+    
+    }else
+    {
+       myPrintf("CRC Error...\n");    
+    }
+
+
+}
+
+
+void printBoard(uint32_t boardRaw)
+{
+    uint16_t boardId;
+    char boardRev, boardRev2;
+    
+    boardId = (boardRaw & 0xFFFF0000) >> 16;
+    
+    myPrintf("%drev", boardId);
+    
+    boardRev = boardRaw & 0x0000FFFF;
+    
+    if(boardRev > 26)
+    {
+        boardRev2 = boardRev / 26 + ('A' - 1);
+        
+        myPrintf("%c", boardRev2);
+        
+        boardRev = boardRev % 26 + ('A' - 1);
+    }
+    else
+    {
+        boardRev = boardRev + ('A' - 1);
+    }
+    
+    myPrintf("%c\n", boardRev);
+    
+}
+
+void processOtaPacket(void)
+{
+    uint32_t boardRx, boardRead;
+//    unit32_t stkBoardRead;
+    uint16_t appId, appVer, stkId, stkVer;
+    uint16_t svdAppId, svdAppVer, svdStkId, svdStkVer;
+//    uint16_t boardId;
+//    char boardRev;
+    
+    
+    
+    boardRead = CY_GET_REG32(Bootloadable_MD_BASE_ADDR(1) + Bootloadable_META_APP_CUST_ID_OFFSET);
+//    stkBoardRead = CY_GET_REG32(Bootloadable_MD_BASE_ADDR(0) + Bootloadable_META_APP_CUST_ID_OFFSET);
+    
+    svdAppId = CY_GET_REG16(Bootloadable_MD_BASE_ADDR(1) + Bootloadable_META_APP_ID_OFFSET);
+    svdAppVer = CY_GET_REG16(Bootloadable_MD_BASE_ADDR(1) + Bootloadable_META_APP_VER_OFFSET);
+    svdStkId = CY_GET_REG16(Bootloadable_MD_BASE_ADDR(0) + Bootloadable_META_APP_ID_OFFSET);
+    svdStkVer = CY_GET_REG16(Bootloadable_MD_BASE_ADDR(0) + Bootloadable_META_APP_VER_OFFSET);
+    
+    if(bleRxBuffer[1] == 0)
+    {
+        boardRx = 0;
+        
+        
+        for(int i = 0 ; i < 14 ; i++)
+        {
+            myPrintf("%x ", bleRxBuffer[i]);
+        }
+        
+        myPrintf("\n");
+        
+        for(int j = 0 ; j < 4 ; j++)
+        {
+            boardRx = (bleRxBuffer[2 + j] << (8 * (3 - j))) | boardRx;
+        }
+        
+        if(boardRx != boardRead)
+        {
+            myPrintf("Will Not Update: Incompatible hardware\n");
+            
+            myPrintf("Saved Hardware ID: ");
+            printBoard(boardRead);
+            
+            myPrintf("Recieved Hardware ID: ");
+            printBoard(boardRx);
+            
+            return;
+        }
+        
+        myPrintf("Board# good: ");
+        printBoard(boardRx);
+        
+        appId = (bleRxBuffer[6] << 8) | bleRxBuffer[7];
+        appVer = (bleRxBuffer[8] << 8) | bleRxBuffer[9];
+        stkId = (bleRxBuffer[10] << 8) | bleRxBuffer[11];
+        stkVer = (bleRxBuffer[12] << 8) | bleRxBuffer[13];
+        
+        
+        if(appId != svdAppId)
+        {
+            myPrintf("Will Not Update: Invalid App ID");
+            
+            return;
+        }
+        
+        if(appVer < svdAppVer)
+        {
+            myPrintf("Will Not Update: Newer app firmware installed\n");
+            myPrintf("Current App Version: %d.%d\n", svdAppVer / 0x100, svdAppVer % 0x100);
+            myPrintf("New App Version: %d.%d\n", appVer / 0x100, appVer % 0x100);
+            return;
+        }
+        else if(appVer > svdAppVer)         
+        {
+//            if(stkVer < svdStkVer)
+//            {
+//                myPrintf("Will Not Update: Newer stack firmware installed\n");
+//                myPrintf("Current Stack Version: %d.%d\n", svdAppVer / 0x100, svdAppVer % 0x100);
+//                myPrintf("New Stack Version: %d.%d\n", appVer / 0x100, appVer % 0x100);
+//                return;
+//            }
+            
+            myPrintf("Updating\n");
+            myPrintf("Current App Version: %d.%d\n", svdAppVer / 0x100, svdAppVer % 0x100);
+            myPrintf("New App Version: %d.%d\n", appVer / 0x100, appVer % 0x100);
+            
+            enterBootloader();          // Should never return
+            
+            return;
+        }
+        else if(appVer == svdAppVer)
+        {
+            
+        }
+        else
+        {
+            myPrintf("APP VERSION ERROR\n");
+            return;
+        }
+        
+        
+        if(stkId != svdStkId)
+        {
+            myPrintf("Will Not Update: Invalid Stack ID");
+            
+            return;
+        }
+        
+        
+        if(stkVer < svdStkVer)
+        {
+            myPrintf("Will Not Update: Newer stack firmware installed\n");
+            myPrintf("Current Stack Version: %d.%d\n", svdAppVer / 0x100, svdAppVer % 0x100);
+            myPrintf("New Stack Version: %d.%d\n", appVer / 0x100, appVer % 0x100);
+            return;
+        }
+        else if(stkVer > svdStkVer)         
+        {
+            myPrintf("Updating\n");
+            myPrintf("Current Stack Version: %d.%d\n", svdAppVer / 0x100, svdAppVer % 0x100);
+            myPrintf("New Stack Version: %d.%d\n", appVer / 0x100, appVer % 0x100);
+            
+            enterBootloader();          // Should never return
+            
+            return;
+        }
+        else if(stkVer == svdStkVer)
+        {
+            myPrintf("Will Not Update: App and Stack versions match installed versions\n");
+            myPrintf("Current App Version: %d.%d\n", svdAppVer / 0x100, svdAppVer % 0x100);
+            myPrintf("Current Stack Version: %d.%d\n", svdAppVer / 0x100, svdAppVer % 0x100);
+        }
+        else
+        {
+            myPrintf("STACK VERSION ERROR\n");
+        }
+        
+    }
+    else if(bleRxBuffer[1] == 0xFF)
+    {
+        myPrintf("Forcing Bootloader Sequence\n");
+        enterBootloader();          // Should never return
+    }
+    else
+    {
+        
+        sendOtaPacket = true;
+        
+//        sendOtaPacket();
+    }
+    
+    
+}
+
+void processProPacket(void)
+{
+    bool updateFlash = 0;
+    uint16_t swVal;
+    uint8_t index;
+    uint8_t address;
+    
+//    bleRxBuffer[0]; //length
+    
+    for(int i = 0 ; i < bleRxBuffer[0] ; i++)
+    {
+        myPrintf("%x ", bleRxBuffer[i]);
+    }
+    
+    myPrintf("\n");
+    
+    if(((bleRxBuffer[1] & 0xC0) >> 6) == DEVICE_TYPE) // check that the app sent the correct type of packet
+    {
+        if((bleRxBuffer[1] & 0x01) != 0)
+        {
+            // read 
+            sendProPacket = true;
+//            myPrintf("needs pro packet sent\n");
+            return;         //ignore the rest of the packet
+        }
+        
+        if(status.pro.isEnabled == 0)     // set into "pro" mode
+        {
+            status.pro.isEnabled = 1;
+            
+//            writeFlash();
+            updateFlash = 1;
+            
+            myPrintf("PRO Mode enabled!\n");
+        }
+        
+//        if((bleRxBuffer[1] & 0x02) != 0)
+//        {
+//            proIsTempWritable = true;
+//        }
+        proIsTempWritable = false;
+        
+        if((bleRxBuffer[1] & 0x02) != 0)
+        {
+            if(status.pro.isWritable != true)
+            {
+                status.pro.isWritable = true;
+                updateFlash = true;
+            }
+            
+            proIsTempWritable = true;
+        }
+        else
+        {
+            if(status.pro.isWritable != false)
+            {
+                status.pro.isWritable = false;
+                updateFlash = true;
+            }
+        }
+        
+        if((bleRxBuffer[1] & 0x04) != 0)
+        {
+            proIsTempWritable = true;
+        }
+        
+        if((bleRxBuffer[2] & 0x02) != 0 && proIsTempWritable) // update deep sleep flag
+        {
+            uint8_t nds = bleRxBuffer[2] & 0x01;
+            if(status.pro.isDisableSleep != nds)
+            {
+                myPrintf("Deep Sleep disabled %d \n", nds);
+                status.pro.isDisableSleep = nds;
+                updateFlash = 1;
+            }
+        }
+        
+        if(bleRxBuffer[0] != 19 || bleRxBuffer[2] != status.address)
+        {
+            if(updateFlash)
+            {
+                writeFlash();
+            }
+            
+            return;
+        }
+        
+//        address = bleRxBuffer[2];
+        
+        for(int j = 3 ; j < 19 ; j += 2)
+        {
+            swVal = (bleRxBuffer[j] << 8) | bleRxBuffer[j + 1];
+            index = (j - 3) / 2;
+            
+            if((swVal & 0x2000) != 0)   // update always-on value
+            {
+                status.pro.alwaysOn[index] = ((swVal & 0x0800) != 0) ? 1 : 0;
+                
+                if(status.pro.alwaysOn[index])
+                {
+                    status.out[index].outCmd = 0xFF;
+                }
+                
+                updateFlash = 1;
+            }
+             
+            if((swVal & 0x1000) != 0)   // update timer value
+            {
+                status.pro.timers[index] = swVal & 0x07FF;
+                
+                updateFlash = 1;
+                
+                if(status.pro.curTime[index] > 0)
+                {
+                    status.pro.curTime[index] = millis(); // reset timer if running
+                }
+            }
+        }
+        
+        if(updateFlash)
+        {
+            writeFlash();
+        }
+        
+    }
+    
+    
+}
+
+void writePassKey(uint32 thisKey)
+{
+    
+    
+    
+    CYBLE_GATT_ERR_CODE_T apiGattErrCode = 0;
+
+    CYBLE_GATT_HANDLE_VALUE_PAIR_T handleValuePair;
+    
+    handleValuePair.value.val = (uint8 *)&thisKey;
+    handleValuePair.value.len = sizeof(thisKey);
+    handleValuePair.attrHandle = CYBLE_SPOD_PASSKEY_CHAR_HANDLE;
+    
+    while (CyBle_GattGetBusStatus() == CYBLE_STACK_STATE_BUSY)
+ 	{
+ 	    CyBle_ProcessEvents();
+ 	}
+    
+    /* To register the service change in the Database of the GATT Server */
+    apiGattErrCode = CyBle_GattsWriteAttributeValue(&handleValuePair, 0u, NULL, CYBLE_GATT_DB_LOCALLY_INITIATED);
+    
+    if (apiGattErrCode != 0)
+    {
+        myPrintf("Service Changed Attribute DB write failed: %d\n", apiGattErrCode );
+    }
+     else
+    {
+        myPrintf("Service Changed Attribute DB write success: ");
+        
+        if(thisKey) {
+//            myPrintf("PASSKEY ON %d\n", millis());
+            myPrintf("PASSKEY ON ");
+            write_millis();
+        } else {
+            myPrintf("PASSKEY OFF ");
+            write_millis();
+        }
+    }
+}
+
+uint8_t localName[] = "sPOD Link #00123456";
+
+#define CYREG_SRSS_TST_DDFT_CTRL 0x40030008
+
+void StackEventHandler( uint32 eventCode, void *eventParam )
+{
+    switch( eventCode )
+    {
+
+        case CYBLE_EVT_HOST_INVALID:
+        myPrintf("CYBLE_EVT_HOST_INVALID:...\n");
+        break;
+
+        case CYBLE_EVT_STACK_ON:
+        {
+//            myPrintf("CYBLE_EVT_STACK_ON:...\n");
+            /* Configure the Link Layer to automatically switch PA control pin P3[2] and LNA control pin P3[3] */
+                    
+            CY_SET_XTND_REG32((void CYFAR *)(CYREG_BLE_BLERD_BB_XO_CAPTRIM), 0xD0D0); 
+            
+            CY_SET_XTND_REG32((void CYFAR *)(CYREG_BLE_BLESS_RF_CONFIG), 0x0331); 
+            CY_SET_XTND_REG32((void CYFAR *)(CYREG_SRSS_TST_DDFT_CTRL), 0x80000302);
+            
+            
+            CYBLE_GAP_BD_ADDR_T localAddr;
+            
+            localAddr.type = 0x00;
+            
+            CyBle_GetDeviceAddress(&localAddr);
+            
+            sprintf((char *)&localName[11], "%02X", DEVICE_TYPE);
+            
+            int index = 0;
+            for(int i = 3; i > 0; i--)
+            {
+               myPrintf("%x ", localAddr.bdAddr[i-1]); 
+               sprintf((char *)&localName[13 + index], "%02X", localAddr.bdAddr[i-1]);
+               index += 2;
+            }
+            
+            myPrintf("\n");
+            
+            myPrintf("%s\n", localName);
+            
+            CyBle_GapFixAuthPassKey(1, passkey);
+            CyBle_GapSetLocalName((const char8*)&localName[0]);
+            CyBle_GappStartAdvertisement( CYBLE_ADVERTISING_FAST );
+        }
+        break;
+
+        case CYBLE_EVT_TIMEOUT:
+//        myPrintf("CYBLE_EVT_TIMEOUT:...\n");
+        break;
+
+        case CYBLE_EVT_HARDWARE_ERROR:
+//        myPrintf("CYBLE_EVT_HARDWARE_ERROR:...\n");
+        break;
+
+        case CYBLE_EVT_HCI_STATUS:
+//        myPrintf("CYBLE_EVT_HCI_STATUS:...\n");
+        break;
+
+        case CYBLE_EVT_STACK_BUSY_STATUS:
+//        myPrintf("CYBLE_EVT_STACK_BUSY_STATUS:...\n");
+        break;
+
+        case CYBLE_EVT_PENDING_FLASH_WRITE:
+//        myPrintf("CYBLE_EVT_PENDING_FLASH_WRITE:...\n");
+        break;
+
+
+        case CYBLE_EVT_GAP_AUTH_REQ:
+            myPrintf("CYBLE_EVT_GAP_AUTH_REQ \n");
+        break;
+
+        case CYBLE_EVT_GAP_PASSKEY_ENTRY_REQUEST:
+            myPrintf("CYBLE_EVT_GAP_PASSKEY_ENTRY_REQUEST \n ");
+
+        break;
+
+        case CYBLE_EVT_GAP_PASSKEY_DISPLAY_REQUEST:
+            {
+                myPrintf("CYBLE_EVT_GAP_PASSKEY_DISPLAY_REQUEST \n");
+                
+                if(bleDisconnect)
+                {
+                    myPrintf("Disconnecting...\n");
+                    CyBle_GapDisconnect(cyBle_connHandle.bdHandle);
+                    break;
+                }
+                
+                uint32 thisKey = *(uint32*)eventParam;
+                
+                writePassKey(thisKey);
+                
+                myPrintf("Passkey is: %d.\n", thisKey);
+                myPrintf("Please enter the passkey on peer device.\n");
+            
+            
+            }
+        break;
+
+        case CYBLE_EVT_GAP_AUTH_COMPLETE:
+            myPrintf("CYBLE_EVT_GAP_AUTH_COMPLETE...\n");
+            writePassKey(0);
+            
+            authGood = true;
+            
+        break;
+
+        case CYBLE_EVT_GAP_AUTH_FAILED:
+            myPrintf("CYBLE_EVT_GAP_AUTH_FAILED...\n");
+            
+            authGood = false;
+            
+            if(bleDisconnect)
+            {
+                myPrintf("Disconnecting...\n");
+                CyBle_GapDisconnect(cyBle_connHandle.bdHandle);
+            }
+        break;
+
+        case CYBLE_EVT_GAP_DEVICE_CONNECTED:
+//            myPrintf("CYBLE_EVT_GAP_DEVICE_CONNECTED:...\n");
+            myPrintf("BLE Connected...\n");
+            isConnected = 1;
+        break;
+
+        case CYBLE_EVT_GAP_DEVICE_DISCONNECTED:
+//            myPrintf("CYBLE_EVT_GAP_DEVICE_DISCONNECTED:...\n");
+            myPrintf("BLE Disconnected...\n");
+            isConnected = 0;
+            sendNotifications = 0;
+            CyBle_GappStartAdvertisement(CYBLE_ADVERTISING_FAST);
+        break;
+
+        case CYBLE_EVT_GAP_ENCRYPT_CHANGE:
+//            myPrintf("CYBLE_EVT_GAP_ENCRYPT_CHANGE:...\n");
+        break;
+
+        case CYBLE_EVT_GAP_CONNECTION_UPDATE_COMPLETE:
+//            myPrintf("CYBLE_EVT_GAP_CONNECTION_UPDATE_COMPLETE:...\n");
+        break;
+
+        case CYBLE_EVT_GAP_KEYINFO_EXCHNGE_CMPLT:
+//            myPrintf("CYBLE_EVT_GAP_KEYINFO_EXCHNGE_CMPLT:...\n");
+        break;
+
+
+        case CYBLE_EVT_GAPP_ADVERTISEMENT_START_STOP:
+//            myPrintf("CYBLE_EVT_GAPP_ADVERTISEMENT_START_STOP:...\n");
+            if(CyBle_GetState() == CYBLE_STATE_DISCONNECTED)
+                CyBle_GappStartAdvertisement(CYBLE_ADVERTISING_FAST);
+        break;
+
+
+        case CYBLE_EVT_GAPC_SCAN_PROGRESS_RESULT:
+//                myPrintf("CYBLE_EVT_GAPC_SCAN_PROGRESS_RESULT:...\n");
+        break;
+
+        case CYBLE_EVT_GAPC_SCAN_START_STOP:
+//                myPrintf("CYBLE_EVT_GAPC_SCAN_START_STOP:...\n");
+        break;
+
+
+
+        case CYBLE_EVT_GATT_CONNECT_IND:
+//                myPrintf("CYBLE_EVT_GATT_CONNECT_IND:...\n");
+        break;
+
+        case CYBLE_EVT_GATT_DISCONNECT_IND:
+//                myPrintf("CYBLE_EVT_GATT_DISCONNECT_IND:...\n");
+        break;
+
+
+        case CYBLE_EVT_GATTC_ERROR_RSP:
+//                myPrintf("CYBLE_EVT_GATTC_ERROR_RSP:...\n");
+        break;
+
+        case CYBLE_EVT_GATTC_XCHNG_MTU_RSP:
+//                myPrintf("CYBLE_EVT_GATTC_XCHNG_MTU_RSP:...\n");
+        break;
+
+        case CYBLE_EVT_GATTC_READ_BY_GROUP_TYPE_RSP:
+//                myPrintf("CYBLE_EVT_GATTC_READ_BY_GROUP_TYPE_RSP:...\n");
+        break;
+
+        case CYBLE_EVT_GATTC_READ_BY_TYPE_RSP:
+//                myPrintf("CYBLE_EVT_GATTC_READ_BY_TYPE_RSP:...\n");
+        break;
+
+        case CYBLE_EVT_GATTC_FIND_INFO_RSP:
+//                myPrintf("CYBLE_EVT_GATTC_FIND_INFO_RSP:...\n");
+        break;
+
+        case CYBLE_EVT_GATTC_FIND_BY_TYPE_VALUE_RSP:
+//                myPrintf("CYBLE_EVT_GATTC_FIND_BY_TYPE_VALUE_RSP:...\n");
+        break;
+
+        case CYBLE_EVT_GATTC_READ_RSP:
+//                myPrintf("CYBLE_EVT_GATTC_READ_RSP:...\n");
+        break;
+
+        case CYBLE_EVT_GATTC_READ_BLOB_RSP:
+//                myPrintf("CYBLE_EVT_GATTC_READ_BLOB_RSP:...\n");
+        break;
+
+        case CYBLE_EVT_GATTC_READ_MULTI_RSP:
+//                myPrintf("CYBLE_EVT_GATTC_READ_MULTI_RSP:...\n");
+        break;
+
+        case CYBLE_EVT_GATTC_WRITE_RSP:
+//                myPrintf("CYBLE_EVT_GATTC_EXEC_WRITE_RSP:...\n");
+        break;
+
+        case CYBLE_EVT_GATTC_EXEC_WRITE_RSP:
+//                myPrintf("...\n");
+        break;
+
+        case CYBLE_EVT_GATTC_HANDLE_VALUE_NTF:
+//                myPrintf("CYBLE_EVT_GATTC_HANDLE_VALUE_NTF:...\n");
+        break;
+
+        case CYBLE_EVT_GATTC_HANDLE_VALUE_IND:
+//                myPrintf("CYBLE_EVT_GATTC_HANDLE_VALUE_IND:...\n");
+        break;
+                
+
+        case CYBLE_EVT_GATTC_INDICATION:
+//                myPrintf("CYBLE_EVT_GATTC_INDICATION:...\n");
+        break;
+
+        case CYBLE_EVT_GATTC_SRVC_DISCOVERY_FAILED:
+//                myPrintf("CYBLE_EVT_GATTC_SRVC_DISCOVERY_FAILED:...\n");
+        break;
+
+        case CYBLE_EVT_GATTC_INCL_DISCOVERY_FAILED:
+//                myPrintf("CYBLE_EVT_GATTC_INCL_DISCOVERY_FAILED:...\n");
+        break;
+
+        case CYBLE_EVT_GATTC_CHAR_DISCOVERY_FAILED:
+//                myPrintf("CYBLE_EVT_GATTC_CHAR_DISCOVERY_FAILED:...\n");
+        break;
+
+        case CYBLE_EVT_GATTC_DESCR_DISCOVERY_FAILED:
+//                myPrintf("CYBLE_EVT_GATTC_DESCR_DISCOVERY_FAILED:...\n");
+        break;
+
+        case CYBLE_EVT_GATTC_SRVC_DUPLICATION:
+//                myPrintf("CYBLE_EVT_GATTC_SRVC_DUPLICATION:...\n");
+        break;
+
+        case CYBLE_EVT_GATTC_CHAR_DUPLICATION:
+//                myPrintf("CYBLE_EVT_GATTC_CHAR_DUPLICATION:...\n");
+        break;
+
+        case CYBLE_EVT_GATTC_DESCR_DUPLICATION:
+//                myPrintf("CYBLE_EVT_GATTC_DESCR_DUPLICATION:...\n");
+        break;
+
+        case CYBLE_EVT_GATTC_SRVC_DISCOVERY_COMPLETE:
+//                myPrintf("CYBLE_EVT_GATTC_SRVC_DISCOVERY_COMPLETE:...\n");
+        break;
+
+        case CYBLE_EVT_GATTC_INCL_DISCOVERY_COMPLETE:
+//                myPrintf("CYBLE_EVT_GATTC_INCL_DISCOVERY_COMPLETE:...\n");
+        break;
+
+        case CYBLE_EVT_GATTC_CHAR_DISCOVERY_COMPLETE:
+//                myPrintf("CYBLE_EVT_GATTC_CHAR_DISCOVERY_COMPLETE:...\n");
+        break;
+
+        case CYBLE_EVT_GATTC_DISCOVERY_COMPLETE:
+//                myPrintf("CYBLE_EVT_GATTC_DISCOVERY_COMPLETE:...\n");
+        break;
+
+
+
+        case CYBLE_EVT_GATTS_XCNHG_MTU_REQ:
+//                myPrintf("CYBLE_EVT_GATTS_XCNHG_MTU_REQ:...\n");
+        break;
+
+        case CYBLE_EVT_GATTS_WRITE_REQ:                        
+//                myPrintf("CYBLE_EVT_GATTS_WRITE_REQ:  ...\n");
+        case CYBLE_EVT_GATTS_WRITE_CMD_REQ:
+          {
+                CYBLE_GATTS_WRITE_REQ_PARAM_T *wrReqParam = (CYBLE_GATTS_WRITE_REQ_PARAM_T *) eventParam;
+                
+                
+                
+//                myPrintf("BLE Write...\n");
+                
+                 // Handling Notification Enable 
+    			if(authGood && wrReqParam->handleValPair.attrHandle == CYBLE_SPOD_COMM_CLIENT_CHARACTERISTIC_CONFIGURATION_DESC_HANDLE)
+    	        {
+                    //myPrintf("CYBLE_SPOD_COMM_CLIENT_CHARACTERISTIC_CONFIGURATION_DESC_HANDLE...\n");
+                    
+    				CYBLE_GATT_HANDLE_VALUE_PAIR_T    notificationCCDHandle;
+    				uint8 ccdValue[2];
+    				
+    	            // Extract CCCD Notification enable flag 
+    	            sendNotifications = wrReqParam->handleValPair.value.val[0];
+    				
+    				// Write the present notification status to the local variable 
+    				ccdValue[0] = sendNotifications;
+    				
+    				ccdValue[1] = 0x00;
+    				
+    				// Update CCCD handle with notification status data
+    				notificationCCDHandle.attrHandle = CYBLE_SPOD_COMM_CLIENT_CHARACTERISTIC_CONFIGURATION_DESC_HANDLE;
+    				
+    				notificationCCDHandle.value.val = ccdValue;
+    				
+    				notificationCCDHandle.value.len = 2;
+    				
+    				// Report data to BLE component for sending data when read by Central device 
+    				CyBle_GattsWriteAttributeValue(&notificationCCDHandle, 0, &cyBle_connHandle, CYBLE_GATT_DB_LOCALLY_INITIATED);			
+    	        }
+    				
+    	        // Handling Write data from Client 
+    	        else if(authGood && wrReqParam->handleValPair.attrHandle == CYBLE_SPOD_COMM_CHAR_HANDLE)
+    	        {
+    					//myPrintf("CYBLE_SPOD_COMM_CHAR_HANDLE...\n");
+                        
+                        uint8 * inData = wrReqParam->handleValPair.value.val;
+                        int i;
+                        for(i = 0; i < wrReqParam->handleValPair.value.len; i++)
+                        {
+                            if(bleFoundDelimiter)
+                            {
+                                if(blePacketLength == -1)
+                                {
+                                    if(inData[i] <= 32)
+                                    {
+                                        blePacketLength = inData[i] + 2;
+                                        bleRxBuffer[bleBufferAddress] = inData[i];
+                                        bleBufferAddress++;
+                                    }
+                                    else
+                                    {
+                                        bleFoundDelimiter = 0;
+                                    }
+                                }
+                                else
+                                {
+                                    bleRxBuffer[bleBufferAddress] = inData[i];
+                                    bleBufferAddress++;
+                                    
+                                    if(bleBufferAddress == blePacketLength)
+                                    {
+                                        //myPrintf("ProcessPacket...\n");
+                                        ProcessPacket(blePacketLength);
+                                        bleFoundDelimiter = 0;
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                if(inData[i] == 0x55)
+                                {
+                                    bleBufferAddress = 0;
+                                    blePacketLength = -1;
+                                    bleFoundDelimiter = 1;
+                                    bleRxBuffer[bleBufferAddress] = inData[i];
+                                    bleBufferAddress++;
+                                }
+                            }
+                        }
+    	        }
+                else if(wrReqParam->handleValPair.attrHandle == CYBLE_SPOD_PASSKEY_CHAR_HANDLE)
+    	        {
+                        passkeyTimer = millis();
+                        myPrintf("Passkey timer reset %d\n", passkeyTimer);
+    	        }
+                else if(authGood && wrReqParam->handleValPair.attrHandle == CYBLE_SPOD_OTA_BOOTLOADER_CHAR_HANDLE)
+                {
+                    uint8 * inData = wrReqParam->handleValPair.value.val;
+                    
+                    for(int i = 0 ; i < wrReqParam->handleValPair.value.len ; i++)
+                    {
+                        bleRxBuffer[i] = inData[i];
+                    }
+                    
+                    processOtaPacket();
+                    
+//                    enterBootloader();
+                }
+                else if(authGood && wrReqParam->handleValPair.attrHandle == CYBLE_SPOD_PRO_MODE_CHAR_HANDLE)
+                {
+                    uint8 * inData = wrReqParam->handleValPair.value.val;
+                    
+                    for(int i = 0 ; i < wrReqParam->handleValPair.value.len ; i++)
+                    {
+                        bleRxBuffer[i] = inData[i];
+                    }
+                    
+                    processProPacket();
+                }
+                    
+                if (eventCode == CYBLE_EVT_GATTS_WRITE_REQ)
+    			{
+                    //myPrintf("CYBLE_EVT_GATTS_WRITE_REQ...\n");
+    	            CyBle_GattsWriteRsp(cyBle_connHandle);
+    			}
+            }  //*/
+        break;
+
+        case CYBLE_EVT_GATTS_PREP_WRITE_REQ:
+//        myPrintf("CYBLE_EVT_GATTS_PREP_WRITE_REQ:...\n");
+        break;
+
+        case CYBLE_EVT_GATTS_EXEC_WRITE_REQ:
+//        myPrintf("CYBLE_EVT_GATTS_EXEC_WRITE_REQ:...\n");
+        break;
+
+        case CYBLE_EVT_GATTS_HANDLE_VALUE_CNF:
+//        myPrintf("CYBLE_EVT_GATTS_HANDLE_VALUE_CNF:...\n");
+        break;
+
+        case CYBLE_EVT_GATTS_DATA_SIGNED_CMD_REQ:
+//        myPrintf("CYBLE_EVT_GATTS_DATA_SIGNED_CMD_REQ:...\n");
+        break;
+
+
+        case CYBLE_EVT_GATTS_INDICATION_ENABLED:
+//        myPrintf("CYBLE_EVT_GATTS_INDICATION_ENABLED:...\n");
+        break;
+
+        case CYBLE_EVT_GATTS_INDICATION_DISABLED:
+//        myPrintf("CYBLE_EVT_GATTS_INDICATION_DISABLED:...\n");
+        break;
+
+
+        case CYBLE_EVT_L2CAP_CONN_PARAM_UPDATE_REQ:
+//        myPrintf("CYBLE_EVT_L2CAP_CONN_PARAM_UPDATE_REQ:...\n");
+        break;
+
+        case CYBLE_EVT_L2CAP_CONN_PARAM_UPDATE_RSP:
+//        myPrintf("CYBLE_EVT_L2CAP_CONN_PARAM_UPDATE_RSP:...\n");
+        break;
+
+        case CYBLE_EVT_L2CAP_COMMAND_REJ:
+//        myPrintf("CYBLE_EVT_L2CAP_COMMAND_REJ:...\n");
+        break;
+
+        case CYBLE_EVT_L2CAP_CBFC_CONN_IND:
+//        myPrintf("CYBLE_EVT_L2CAP_CBFC_CONN_IND:...\n");
+        break;
+
+        case CYBLE_EVT_L2CAP_CBFC_CONN_CNF:
+//        myPrintf("CYBLE_EVT_L2CAP_CBFC_CONN_CNF:...\n");
+        break;
+
+        case CYBLE_EVT_L2CAP_CBFC_DISCONN_IND:
+//        myPrintf("CYBLE_EVT_L2CAP_CBFC_DISCONN_IND:...\n");
+        break;
+
+        case CYBLE_EVT_L2CAP_CBFC_DISCONN_CNF:
+//        myPrintf("CYBLE_EVT_L2CAP_CBFC_DISCONN_CNF:...\n");
+        break;
+
+        case CYBLE_EVT_L2CAP_CBFC_DATA_READ:
+//        myPrintf("CYBLE_EVT_L2CAP_CBFC_DATA_READ:...\n");
+        break;
+
+        case CYBLE_EVT_L2CAP_CBFC_RX_CREDIT_IND:
+//        myPrintf("CYBLE_EVT_L2CAP_CBFC_RX_CREDIT_IND:...\n");
+        break;
+
+        case CYBLE_EVT_L2CAP_CBFC_TX_CREDIT_IND:
+//        myPrintf("CYBLE_EVT_L2CAP_CBFC_TX_CREDIT_IND...\n");
+        break;
+
+        case CYBLE_EVT_L2CAP_CBFC_DATA_WRITE_IND:
+//        myPrintf("CYBLE_EVT_L2CAP_CBFC_DATA_WRITE_IND...\n");
+        break;
+
+        default:
+        break;
+    }
+}
+
+/* [] END OF FILE */

@@ -1,0 +1,28 @@
+Last Modified Date & Time: 10/06/2023 09:34:15
+
+BLE_OTA_Stack_x: BLE_OTA_Stack_x.cydwr
+	cy_boot [v5.70] to [v6.0]
+	Em_EEPROM_Dynamic [v2.0] to [v2.20]
+	LIN_Dynamic [v4.0] to [v5.0]
+
+BLE_OTA_Stack_x: TopDesign.cysch
+	CyBle [v3.40] to [v3.66]
+	isr_timeout [v1.70] to [v1.71]
+	Wakeup_Interrupt [v1.70] to [v1.71]
+
+
+Last Modified Date & Time: 10/06/2023 09:34:41
+
+sPOD Bantam_x: sPOD Bantam_x.cydwr
+	cy_boot [v5.80] to [v6.0]
+	Em_EEPROM_Dynamic [v2.0] to [v2.20]
+	LIN_Dynamic [v4.0] to [v5.0]
+
+sPOD Bantam_x: TopDesign.cysch
+	ADC [v2.50] to [v2.60]
+	BLE_1 [v3.40] to [v3.66]
+	isr_canint [v1.70] to [v1.71]
+	ISR_LVD [v1.70] to [v1.71]
+	ISR_WDT [v1.70] to [v1.71]
+
+

@@ -11,7 +11,8 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.spod.blecontroller.R
 import com.spod.blecontroller.ble.BleConstants
-import com.spod.blecontroller.ble.ConnectionStateimport com.spod.blecontroller.databinding.ActivityConnectionBinding
+import com.spod.blecontroller.ble.ConnectionState
+import com.spod.blecontroller.databinding.ActivityConnectionBinding
 import com.spod.blecontroller.ui.control.ControlActivity
 import com.spod.blecontroller.util.Logger
 import kotlinx.coroutines.launch

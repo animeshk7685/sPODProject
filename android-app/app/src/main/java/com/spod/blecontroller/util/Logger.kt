@@ -59,8 +59,8 @@ object Logger {
     }
 
     fun warn(tag: String, message: String) {
-        log(LogLevel.INFO, tag, message)
-        Log.w(LOGCAT_TAG, "[$tag] WARN: $message")
+        log(LogLevel.WARN, tag, message)
+        Log.w(LOGCAT_TAG, "[$tag] $message")
     }
 
     /** Log a received BLE packet */
@@ -97,6 +97,7 @@ object Logger {
 
     enum class LogLevel(val prefix: String) {
         INFO("INFO"),
+        WARN("WARN"),
         DEBUG("DBUG"),
         ERROR("ERR!"),
         TX("TX  "),

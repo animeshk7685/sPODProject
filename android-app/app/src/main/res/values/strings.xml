@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">sPOD BLE Controller</string>
+
+    <!-- Screen titles -->
+    <string name="scan_title">Scan for Devices</string>
+    <string name="connection_title">Connecting</string>
+    <string name="control_title">PCM Control</string>
+
+    <!-- Scan screen -->
+    <string name="start_scan">Start Scan</string>
+    <string name="stop_scan">Stop Scan</string>
+    <string name="scanning">Scanning for devices…</string>
+    <string name="scan_idle">Tap Scan to discover devices</string>
+    <string name="no_devices">No devices found.\nTap Scan to search.</string>
+
+    <!-- Connection screen -->
+    <string name="status_connecting">Connecting…</string>
+    <string name="status_connected">Connected</string>
+    <string name="status_discovering">Discovering services…</string>
+    <string name="status_services_found">Services found</string>
+    <string name="status_ready">Ready!</string>
+    <string name="status_failed">Connection failed</string>
+    <string name="status_timeout">Connection timed out</string>
+    <string name="status_disconnecting">Disconnecting…</string>
+    <string name="status_disconnected">Disconnected</string>
+    <string name="retry">Retry</string>
+    <string name="cancel">Cancel</string>
+
+    <!-- Control screen -->
+    <string name="all_on">All ON</string>
+    <string name="all_off">All OFF</string>
+    <string name="show_debug">Show Debug Log</string>
+    <string name="hide_debug">Hide Debug Log</string>
+</resources>

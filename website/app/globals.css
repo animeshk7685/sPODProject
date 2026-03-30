@@ -1,8 +1,21 @@
 @import "tailwindcss";
 
+/*
+ * Override Tailwind v4's default media-query dark variant with a class-based
+ * one so that the .dark class on <html> controls dark mode — not the OS
+ * preference. This allows the user's explicit toggle choice to take effect.
+ */
+@variant dark (&:is(.dark *));
+
 :root {
   --background: #ffffff;
   --foreground: #0f172a;
+}
+
+/* Applied when the Navbar adds the .dark class to <html> */
+html.dark {
+  --background: #0a0a0f;
+  --foreground: #f1f5f9;
 }
 
 @theme inline {
@@ -19,11 +32,6 @@ body {
   color: var(--foreground);
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   transition: background-color 0.3s ease, color 0.3s ease;
-}
-
-.dark body {
-  --background: #0a0a0f;
-  --foreground: #f1f5f9;
 }
 
 * {

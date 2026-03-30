@@ -29,6 +29,16 @@ export default function Navbar() {
     if (saved === "true") {
       setDarkMode(true);
       document.documentElement.classList.add("dark");
+    } else if (saved === "false") {
+      // User explicitly chose light mode — remove class even if OS is dark
+      setDarkMode(false);
+      document.documentElement.classList.remove("dark");
+    } else {
+      // No saved preference yet — mirror the OS preference so the .dark class
+      // matches what the user expects on first visit
+      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      setDarkMode(prefersDark);
+      document.documentElement.classList.toggle("dark", prefersDark);
     }
   }, []);
 

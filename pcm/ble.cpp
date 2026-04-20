@@ -608,6 +608,14 @@ static void processCANPacket(uint8_t packetLength)
           status.out[i].blinkOn = bleRxBuffer[8] * FLASH_SPEED; 
           status.out[i].blinkOff = bleRxBuffer[9] * FLASH_SPEED;
           
+          // Sync to circuit_status[] which is read by update_pcmN_outputs()
+          uint8_t ci_index = current_pcm * CIRCUITS + i;
+          if (ci_index < PCMS * CIRCUITS) {
+              circuit_status[ci_index].outCmd  = status.out[i].outCmd;
+              circuit_status[ci_index].blinkOn = status.out[i].blinkOn;
+              circuit_status[ci_index].blinkOff = status.out[i].blinkOff;
+          }
+
           isAwake = 1;
           bleAliveTimer = millis();
       } else 

@@ -85,6 +85,14 @@ static void rx_switch_packet()
             }
             status.out[i].blinkOn = rx_buffer[3] * FLASH_SPEED; 
             status.out[i].blinkOff = rx_buffer[4] * FLASH_SPEED;
+
+            // Sync to circuit_status[] which is read by update_pcmN_outputs()
+            uint8_t ci_index = current_pcm * CIRCUITS + i;
+            if (ci_index < PCMS * CIRCUITS) {
+                circuit_status[ci_index].outCmd  = status.out[i].outCmd;
+                circuit_status[ci_index].blinkOn = status.out[i].blinkOn;
+                circuit_status[ci_index].blinkOff = status.out[i].blinkOff;
+            }
         }
     } else {
         currSwitchValue[_index] = rx_buffer[2];

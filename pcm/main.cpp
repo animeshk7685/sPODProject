@@ -197,8 +197,8 @@ void pushCanFifo(uint8_t* buf)
 {
     memcpy(canTxFifoBuffer[canTxFifoHead].rx_buf, buf, sizeof(canTxFifoBuffer[canTxFifoHead].rx_buf));
     canTxFifoHead = (canTxFifoHead + 1) % CAN_TX_FIFO_NUM;
-    if (canTxFifoHead == canTxFifoTail) {    // to avoid overtaking
-        canTxFifoTail %= (canTxFifoTail + 1) % CAN_TX_FIFO_NUM;
+    if (canTxFifoHead == canTxFifoTail) {    // FIFO full — drop oldest item to avoid overtaking
+        canTxFifoTail = (canTxFifoTail + 1) % CAN_TX_FIFO_NUM;
     }
 }
 
@@ -207,7 +207,7 @@ uint8_t popCanFifo(uint8_t* buf)
 {
     if (canTxFifoHead != canTxFifoTail) {
         memcpy(buf, canTxFifoBuffer[canTxFifoTail].rx_buf, sizeof(canTxFifoBuffer[canTxFifoTail].rx_buf));
-        canTxFifoTail %= (canTxFifoTail + 1) % CAN_TX_FIFO_NUM;
+        canTxFifoTail = (canTxFifoTail + 1) % CAN_TX_FIFO_NUM;
         return 1;
     }
     return 0;

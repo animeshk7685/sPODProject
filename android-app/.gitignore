@@ -1,0 +1,32 @@
+# Android build artifacts
+.gradle/
+.idea/
+*.iml
+local.properties
+build/
+app/build/
+
+# Generated files
+app/src/main/gen/
+
+# Keystore files (never commit these)
+*.jks
+*.keystore
+
+# Google services
+google-services.json
+
+# Kotlin
+*.class
+
+# Proguard
+proguard/
+
+# Lint
+lint/
+
+# Android Profiler artifacts
+captures/
+
+# Gradle wrapper jar (optional: can be committed for reproducible builds)
+gradle/wrapper/gradle-wrapper.jar

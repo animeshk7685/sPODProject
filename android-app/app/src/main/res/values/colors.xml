@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Primary brand color: Dark teal/blue for industrial theme -->
+    <color name="primary">#00695C</color>
+    <color name="primary_variant">#004D40</color>
+    <color name="on_primary">#FFFFFF</color>
+    <color name="secondary">#0277BD</color>
+    <color name="on_secondary">#FFFFFF</color>
+
+    <!-- Background colors -->
+    <color name="background">#F5F5F5</color>
+    <color name="surface">#FFFFFF</color>
+    <color name="on_surface">#212121</color>
+    <color name="on_surface_variant">#757575</color>
+
+    <!-- Circuit state colors -->
+    <color name="circuit_on">#2E7D32</color>
+    <color name="circuit_off">#B71C1C</color>
+
+    <!-- Card background colors -->
+    <color name="card_active">#E8F5E9</color>
+    <color name="card_inactive">#FAFAFA</color>
+
+    <!-- Connection status colors -->
+    <color name="status_connected">#2E7D32</color>
+    <color name="status_disconnected">#B71C1C</color>
+    <color name="status_connecting">#F57F17</color>
+    <color name="status_failed">#B71C1C</color>
+
+    <!-- RSSI signal strength colors -->
+    <color name="signal_strong">#2E7D32</color>
+    <color name="signal_good">#558B2F</color>
+    <color name="signal_fair">#F57F17</color>
+    <color name="signal_weak">#B71C1C</color>
+</resources>
